@@ -1,6 +1,6 @@
 
 from event import complianceChangeEventHandler
-from scan import scanCloudwatchLogGroups
+from scan import scanCloudwatchLogGroups, scanS3Buckets
 
 
 def lambda_handler(event, context):
@@ -37,6 +37,10 @@ def handler_config(event):
     return (True, "No action - "+detail_type)
 
 def handler_scan(event):
+    resource = event['resource'] if 'resource' in event else 'all'
     results = []
-    results.append(scanCloudwatchLogGroups(event))
+    if resource == 'all' or resource == 'CloudwatchLogGroups':
+        results.append(scanCloudwatchLogGroups(event))
+    if resource == 'all' or resource == 'S3Buckets':
+        results.append(scanS3Buckets(event))
     return (True, '|'.join(results))

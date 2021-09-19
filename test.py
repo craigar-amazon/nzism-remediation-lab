@@ -39,7 +39,9 @@ def sample_event1():
 
 def sample_event2():
     return {
-        "source": "scan"
+        "source": "scan",
+        "resource": "S3Buckets",
+        "rule": "s3-bucket-ssl-requests-only"
     }
 
 lambda_handler(sample_event2(), {})

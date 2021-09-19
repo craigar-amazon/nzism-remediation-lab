@@ -14,6 +14,18 @@ def applyCloudWatchLogGroupList(applyToCloudWatchLogGroup, cfg):
     return applyCount
 
 
+def applyS3BucketList(applyToS3Bucket, cfg):
+    s3_client = boto3.client('s3')
+    applyCount = 0
+    response = s3_client.list_buckets()
+    buckets = response['Buckets']
+    for bucket in buckets:
+        bucketName = bucket['Name']
+        if applyToS3Bucket(bucketName, cfg):
+            applyCount += 1
+    return applyCount
+
+
 def validCMKARN(keyId):
     try:
         kms_client = boto3.client('kms')
@@ -25,4 +37,21 @@ def validCMKARN(keyId):
         print("Failed to describe_key")
         print(e)
         print("KeyId="+keyId)
+        return ''
+
+# Allow s3:GetBucketPolicy
+def getBucketPolicy(bucketName):
+    try:
+        s3_client = boto3.client('s3')
+        response = s3_client.get_bucket_policy(Bucket=bucketName)
+        r = response['Policy']
+        print(r)
+        return r
+    except botocore.exceptions.ClientError as e:
+        erc = e.response['Error']['Code']
+        if erc == 'NoSuchBucketPolicy':
+            return ''
+        print("Failed to get_bucket_policy")
+        print(e)
+        print("Bucket="+bucketName)
         return ''

@@ -39,3 +39,15 @@ def applyCloudWatchLogGroup(logGroup, cfg):
             delta = True
 
     return delta
+
+def scanS3Buckets(args):
+    cfg = {
+    }
+    query.applyS3BucketList(applyS3BucketSSLOnlyPolicy, cfg)
+    return "Fixed"
+
+def applyS3BucketSSLOnlyPolicy(bucketName, cfg):
+    print(bucketName)
+    policyText = query.getBucketPolicy(bucketName)
+    print(policyText)
+    return True
