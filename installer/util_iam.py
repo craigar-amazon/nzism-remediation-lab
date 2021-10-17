@@ -2,7 +2,7 @@ import json
 import botocore
 import boto3
 
-def get_lambda_trust_policy_json():
+def getLambdaTrustPolicyJson():
     return {
         'Version': "2012-10-17",
         'Statement': [
@@ -16,12 +16,13 @@ def get_lambda_trust_policy_json():
         ]
     }
 
-def get_lambda_basic_policy():
+def getLambdaBasicPolicyArn():
     return "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 
-def createLambdaIamRole(name, description):
-    policyJson = get_lambda_trust_policy_json()
-    policyDoc = json.dumps(policyJson)
+
+
+def createIamRole(name, description, trustPolicyJson):
+    policyDoc = json.dumps(trustPolicyJson)
     try:
         iam_client = boto3.client('iam')
         response = iam_client.create_role(
@@ -47,6 +48,8 @@ def getIamRole(roleName):
         r = response['Role']
         return r
     except botocore.exceptions.ClientError as e:
+        if e.response['Error']['Code'] == 'NoSuchEntity':
+            return None
         print("Failed to iam.get_role")
         print("roleName: "+roleName)
         print(e)
@@ -83,11 +86,10 @@ def putRolePolicy(roleName, policyName, policyJson):
         print(e)
         return False
 
-def declareLambdaIamRole(name, description):
+def declareIamRole(name, description, trustPolicyJson):
     role = getIamRole(name)
     if not role:
-        role = createLambdaIamRole(name, description)
-    attachRolePolicy(name, get_lambda_basic_policy())
+        role = createIamRole(name, description, trustPolicyJson)
     return role
 
 def deleteIamRole(roleName):

@@ -1,3 +1,4 @@
+import json
 import botocore
 import boto3
 
@@ -13,7 +14,10 @@ def getLambdaFunction(functionName):
         )
         return response
     except botocore.exceptions.ClientError as e:
+        if e.response['Error']['Code'] == 'ResourceNotFoundException':
+            return None
         print("Failed to lambda.get_function")
+        print("functionName: "+functionName)
         print(e)
         return None
 
@@ -57,6 +61,7 @@ def updateLambdaFunctionConfiguration(functionName, roleArn, cfg):
         return response
     except botocore.exceptions.ClientError as e:
         print("Failed to lambda.update_function_configuration")
+        print("functionName: "+functionName)
         print(e)
         return None
 
@@ -72,6 +77,7 @@ def updateLambdaFunctionCode(functionName, codePath):
         return response
     except botocore.exceptions.ClientError as e:
         print("Failed to lambda.update_function_code")
+        print("functionName: "+functionName)
         print(e)
         return None
 
@@ -85,6 +91,7 @@ def deleteLambdaFunction(functionName):
         return True
     except botocore.exceptions.ClientError as e:
         print("Failed to lambda.delete_function")
+        print("functionName: "+functionName)
         print(e)
         return False
 
@@ -101,3 +108,25 @@ def declareLambdaFunction(functionName, roleArn, cfg, codePath):
         if createResponse:
             codeSha256 = createResponse["CodeSha256"]
     return codeSha256
+
+def invokeLambdaFunction(functionName, payloadJson):
+    try:
+        lambda_client = boto3.client('lambda')
+        response = lambda_client.invoke(
+            FunctionName=functionName,
+            InvocationType='RequestResponse',
+            Payload=json.dumps(payloadJson).encode("utf-8")
+        )
+        payload = json.loads(response['Payload'].read().decode("utf-8"))
+        print(payload)
+        return {
+            'StatusCode': response['StatusCode'],
+            'Payload': payload
+        }
+        
+    except botocore.exceptions.ClientError as e:
+        print("Failed to lambda.invoke")
+        print("functionName: "+functionName)
+        print(e)
+        return False
+    
