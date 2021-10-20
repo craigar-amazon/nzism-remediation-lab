@@ -95,27 +95,23 @@ def deleteLambdaFunction(functionName):
         print(e)
         return False
 
-def declareLambdaFunction(functionName, roleArn, cfg, codePath):
-    codeSha256 = ''
-    getResponse = getLambdaFunction(functionName)
-    if getResponse:
+def declareLambdaFunctionArn(functionName, roleArn, cfg, codePath):
+    lambdafn = getLambdaFunction(functionName)
+    if lambdafn:
         updateLambdaFunctionConfiguration(functionName, roleArn, cfg)
-        codeResponse = updateLambdaFunctionCode(functionName, codePath)
-        if codeResponse:
-            codeSha256 = codeResponse["CodeSha256"]
-    else:
-        createResponse = createLambdaFunction(functionName, roleArn, cfg, codePath)
-        if createResponse:
-            codeSha256 = createResponse["CodeSha256"]
-    return codeSha256
+        updateLambdaFunctionCode(functionName, codePath)
+        return lambdafn['Configuration']['FunctionArn']
+    lambdafnNew = createLambdaFunction(functionName, roleArn, cfg, codePath)
+    if lambdafnNew: return lambdafnNew['FunctionArn']
+    raise Exception("Could not create lambda '"+functionName+"'")
 
-def invokeLambdaFunction(functionName, payloadJson):
+def invokeLambdaFunction(functionName, payloadMap):
     try:
         lambda_client = boto3.client('lambda')
         response = lambda_client.invoke(
             FunctionName=functionName,
             InvocationType='RequestResponse',
-            Payload=json.dumps(payloadJson).encode("utf-8")
+            Payload=json.dumps(payloadMap).encode("utf-8")
         )
         payload = json.loads(response['Payload'].read().decode("utf-8"))
         print(payload)

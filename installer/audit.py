@@ -1,9 +1,6 @@
-import sys
-import botocore
-import boto3
-from util_iam import getIamRole
-from util_lambda import declareLambdaFunction
-from util_lambda import invokeLambdaFunction
+import util_iam as ui
+import util_lambda as ul
+import util_eb as ue
 
 def get_lambda_config():
     return {
@@ -29,27 +26,36 @@ def get_assume_role_policy_json(roleName):
     }
 
 
-# lambdaRoleName = 'NZISMRemediationLambdaRole1'
-# lambdaRoleDescription = 'Execution role for NZISM Remediation Lambda'
-# memberRoleName = 'NZISMRemediationExecutionRole'
-
-# role = declareLambdaIamRole(lambdaRoleName, lambdaRoleDescription)
-# putRolePolicy(lambdaRoleName, "AssumeMemberExecutionRolePolicy", get_assume_role_policy_json(memberRoleName))
-# lambdaCfg = get_lambda_config()
-# declareLambdaFunction("NZISMAutoRemediation", role['Arn'], lambdaCfg, './lambda')
-
 lambdaRoleName = 'aws-controltower-AuditAdministratorRole'
-lambdaRole = getIamRole(lambdaRoleName)
+lambdaRole = ui.getIamRole(lambdaRoleName)
 if not lambdaRole:
     raise Exception('Required role '+lambdaRoleName+" does not exist")
 lambdaCfg = get_lambda_config()
-declareLambdaFunction("NZISMAutoRemediation", lambdaRole['Arn'], lambdaCfg, './lambda')
+lambdaArn = ul.declareLambdaFunctionArn("NZISMAutoRemediation", lambdaRole['Arn'], lambdaCfg, './lambda')
 
-payload = {
-    'source': "installer"
+eventBusName = 'NZISM-AutoRemediation'
+ruleName = 'ComplianceChange'
+ruleDescription = "Config Rule Compliance Change"
+eventPattern = {
+  'source': ["aws.config"],
+  'detail-type': ["Config Rules Compliance Change"]
 }
+maxAgeSecs = 12 * 3600
+ebArn = ue.declareEventBusArn(eventBusName)
+print(ebArn)
+ruleArn = ue.putEventBusRuleArn(ebArn, ruleName, eventPattern, ruleDescription)
 
-invokeLambdaFunction("NZISMAutoRemediation", payload)
+ue.putEventBusLambdaTarget(ebArn, ruleName, lambdaArn, maxAgeSecs)  
+
+# deleteEventBus(eventBusName, [ruleName])
+
+
+
+
+# payload = {
+#     'source': "installer"
+# }
+# ul.invokeLambdaFunction("NZISMAutoRemediation", payload)
 
 
 
