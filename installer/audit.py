@@ -1,6 +1,7 @@
 import util_iam as ui
 import util_lambda as ul
 import util_eb as ue
+import util_org as uo
 
 def get_lambda_config():
     return {
@@ -25,6 +26,12 @@ def get_assume_role_policy_json(roleName):
         ]
     }
 
+# lz1 = describeLandingZone(['Legacy-Production'])
+# lz1 = describeLandingZone([], 'core', 'security', 'log-archive')
+
+landingZone = uo.describeLandingZone()
+organizationId = landingZone['OrganizationId']
+print(organizationId)
 
 lambdaRoleName = 'aws-controltower-AuditAdministratorRole'
 lambdaRole = ui.getIamRole(lambdaRoleName)
@@ -42,6 +49,7 @@ eventPattern = {
 }
 maxAgeSecs = 12 * 3600
 ebArn = ue.declareEventBusArn(eventBusName)
+ue.putEventBusPermissionForOrganization(eventBusName, organizationId)
 print(ebArn)
 ruleArn = ue.putEventBusRuleArn(ebArn, ruleName, eventPattern, ruleDescription)
 

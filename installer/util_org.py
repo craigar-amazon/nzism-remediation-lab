@@ -156,9 +156,3 @@ def describeLandingZone(excludedOUNames=[], securityOUName='Security', auditAcco
         lzFactoryMembersByOUId[ouId] = ouNode
     lz['FactoryMembersByOUId'] = lzFactoryMembersByOUId
     return lz  
-
-# lz1 = describeLandingZone(['Legacy-Production'])
-# print(lz1)
-
-lz1 = describeLandingZone([], 'core', 'security', 'log-archive')
-print(lz1)

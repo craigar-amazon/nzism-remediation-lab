@@ -17,18 +17,18 @@ def getEventBus(eventBusName):
         print(e)
         return None
 
-def createEventBus(eventBusName):
+def createEventBusArn(eventBusName):
     try:
         eb_client = boto3.client('events')
         response = eb_client.create_event_bus(
             Name=eventBusName
         )
-        return response
+        return response['EventBusArn']
     except botocore.exceptions.ClientError as e:
         print("Failed to events.create_event_bus")
         print("eventBusName: "+eventBusName)
         print(e)
-        return None
+        raise Exception("Could not create custom event bus '"+eventBusName+"'")
 
 def deleteEventBus(eventBusName, ruleNames):
     try:
@@ -51,9 +51,30 @@ def deleteEventBus(eventBusName, ruleNames):
 def declareEventBusArn(eventBusName):
     eventBus = getEventBus(eventBusName)
     if eventBus: return eventBus['Arn']
-    eventBusNew = createEventBus(eventBusName)
-    if eventBusNew: return eventBusNew['EventBusArn']
-    raise Exception("Could create custom event bus '"+eventBusName+"'")
+    return createEventBusArn(eventBusName)
+
+
+def putEventBusPermissionForOrganization(eventBusName, organizationId):
+    try:
+        eb_client = boto3.client('events')
+        eb_client.put_permission(
+            EventBusName=eventBusName,
+            Principal = '*',
+            Action = 'events:PutEvents',
+            StatementId = organizationId,
+            Condition = {
+                'Type': 'StringEquals',
+                'Key': 'aws:PrincipalOrgID',
+                'Value': organizationId
+            }
+        )
+    except botocore.exceptions.ClientError as e:
+        print("Failed to events.put_permission")
+        print("eventBusName: "+eventBusName)
+        print("organizationId: "+organizationId)
+        print(e)
+        raise Exception("Could not grant organization permission for custom event bus '"+eventBusName+"'")
+
 
 # Allow events:PutRule
 def putEventBusRuleArn(eventBusArn, ruleName, eventPatternMap, ruleDescription):
