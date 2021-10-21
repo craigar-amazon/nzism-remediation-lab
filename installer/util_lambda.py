@@ -4,6 +4,14 @@ import boto3
 
 from util_file import getZipCodeBytes
 
+def _is_resource_not_found(e):
+    return e.response['Error']['Code'] == 'ResourceNotFoundException'    
+
+def _fail(e, op, functionName):
+    print("Unexpected error calling "+op)
+    print("functionName: "+functionName)
+    print(e)
+    return "Unexpected error calling {} on {}".format(op, functionName)
 
 # Allow lambda:GetFunction
 def getLambdaFunction(functionName):
@@ -14,13 +22,9 @@ def getLambdaFunction(functionName):
         )
         return response
     except botocore.exceptions.ClientError as e:
-        if e.response['Error']['Code'] == 'ResourceNotFoundException':
-            return None
-        print("Failed to lambda.get_function")
-        print("functionName: "+functionName)
-        print(e)
-        return None
-
+        if _is_resource_not_found(e): return None
+        erm = _fail(e, 'lambda.get_function', functionName)
+        raise Exception(erm)
 
 # Allow lambda:CreateFunction
 def createLambdaFunction(functionName, roleArn, cfg, codePath):
@@ -41,9 +45,8 @@ def createLambdaFunction(functionName, roleArn, cfg, codePath):
         )
         return response
     except botocore.exceptions.ClientError as e:
-        print("Failed to lambda.create_function")
-        print(e)
-        return None
+        erm = _fail(e, 'lambda.create_function', functionName)
+        raise Exception(erm)
 
 # Allow lambda:UpdateFunctionConfiguration
 def updateLambdaFunctionConfiguration(functionName, roleArn, cfg):
@@ -60,10 +63,8 @@ def updateLambdaFunctionConfiguration(functionName, roleArn, cfg):
         )
         return response
     except botocore.exceptions.ClientError as e:
-        print("Failed to lambda.update_function_configuration")
-        print("functionName: "+functionName)
-        print(e)
-        return None
+        erm = _fail(e, 'update_function_configuration', functionName)
+        raise Exception(erm)
 
 # Allow lambda:UpdateFunctionCode
 def updateLambdaFunctionCode(functionName, codePath):
@@ -76,10 +77,54 @@ def updateLambdaFunctionCode(functionName, codePath):
         )
         return response
     except botocore.exceptions.ClientError as e:
-        print("Failed to lambda.update_function_code")
-        print("functionName: "+functionName)
-        print(e)
-        return None
+        erm = _fail(e, 'update_function_code', functionName)
+        raise Exception(erm)
+
+def getLambdaPolicy(functionArn):
+    try:
+        lambda_client = boto3.client('lambda')
+        response = lambda_client.get_policy(
+            FunctionName=functionArn
+        )
+        return response
+    except botocore.exceptions.ClientError as e:
+        if _is_resource_not_found(e): return None
+        erm = _fail(e, 'get_policy', functionArn)
+        raise Exception(erm)
+
+def removeLambdaPolicy(functionArn, sid):
+    try:
+        lambda_client = boto3.client('lambda')
+        lambda_client.remove_permission(
+            FunctionName=functionArn,
+            StatementId = sid
+        )
+        return True
+    except botocore.exceptions.ClientError as e:
+        if _is_resource_not_found(e): return False
+        erm = _fail(e, 'remove_permission', functionArn)
+        raise Exception(erm)
+
+def addLambdaPolicyForEventRule(functionArn, sid, ruleArn):
+    try:
+        lambda_client = boto3.client('lambda')
+        lambda_client.add_permission(
+            FunctionName=functionArn,
+            StatementId = sid,
+            Action = "lambda:InvokeFunction",
+            Principal = "events.amazonaws.com",
+            SourceArn = ruleArn
+        )
+    except botocore.exceptions.ClientError as e:
+        erm = _fail(e, 'add_permission', functionArn)
+        raise Exception(erm)
+
+
+def declareLambdaPolicyForEventRule(functionArn, ruleArn):
+    sid = 'EventRule'
+    removeLambdaPolicy(functionArn, sid)
+    addLambdaPolicyForEventRule(functionArn, sid, ruleArn)
+
 
 # Allow lambda:DeleteFunction
 def deleteLambdaFunction(functionName):
@@ -90,9 +135,7 @@ def deleteLambdaFunction(functionName):
         )
         return True
     except botocore.exceptions.ClientError as e:
-        print("Failed to lambda.delete_function")
-        print("functionName: "+functionName)
-        print(e)
+        _fail(e, 'delete_function', functionName)
         return False
 
 def declareLambdaFunctionArn(functionName, roleArn, cfg, codePath):
@@ -119,10 +162,6 @@ def invokeLambdaFunction(functionName, payloadMap):
             'StatusCode': response['StatusCode'],
             'Payload': payload
         }
-        
     except botocore.exceptions.ClientError as e:
-        print("Failed to lambda.invoke")
-        print("functionName: "+functionName)
-        print(e)
-        return False
-    
+        _fail(e, 'invoke', functionName)
+        return None

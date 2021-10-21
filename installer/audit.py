@@ -33,12 +33,13 @@ landingZone = uo.describeLandingZone()
 organizationId = landingZone['OrganizationId']
 print(organizationId)
 
+lambdaFunctionName = "NZISMAutoRemediation"
 lambdaRoleName = 'aws-controltower-AuditAdministratorRole'
 lambdaRole = ui.getIamRole(lambdaRoleName)
 if not lambdaRole:
     raise Exception('Required role '+lambdaRoleName+" does not exist")
 lambdaCfg = get_lambda_config()
-lambdaArn = ul.declareLambdaFunctionArn("NZISMAutoRemediation", lambdaRole['Arn'], lambdaCfg, './lambda')
+lambdaArn = ul.declareLambdaFunctionArn(lambdaFunctionName, lambdaRole['Arn'], lambdaCfg, './lambda')
 
 eventBusName = 'NZISM-AutoRemediation'
 ruleName = 'ComplianceChange'
@@ -52,6 +53,7 @@ ebArn = ue.declareEventBusArn(eventBusName)
 ue.putEventBusPermissionForOrganization(eventBusName, organizationId)
 print(ebArn)
 ruleArn = ue.putEventBusRuleArn(ebArn, ruleName, eventPattern, ruleDescription)
+ul.declareLambdaPolicyForEventRule(lambdaArn, ruleArn)
 
 ue.putEventBusLambdaTarget(ebArn, ruleName, lambdaArn, maxAgeSecs)  
 
