@@ -2,6 +2,13 @@ import sys
 import botocore
 import boto3
 
+def _fail(e, op, id):
+    print("Unexpected error calling organizations."+op)
+    if id:
+        print("id: "+id)
+    print(e)
+    return "Unexpected error calling {}".format(op)
+
 def describe_organization():
     try:
         org_client = boto3.client('organizations')
@@ -9,9 +16,8 @@ def describe_organization():
         r = response['Organization']
         return r
     except botocore.exceptions.ClientError as e:
-        print("Failed to organizations.describe_organization")
-        print(e)
-        return None
+        erm = _fail(e, 'describe_organization')
+        raise Exception(erm)
 
 def map_root_ids_by_name():
     rootIdByName = {}
@@ -27,9 +33,8 @@ def map_root_ids_by_name():
                 rootIdByName[rootName] = rootId
         return rootIdByName
     except botocore.exceptions.ClientError as e:
-        print("Failed to organizations.list_roots")
-        print(e)
-        return None
+        erm = _fail(e, 'list_roots')
+        raise Exception(erm)
 
 def map_ou_ids_by_name(parentId):
     ouIdByName = {}
@@ -45,9 +50,8 @@ def map_ou_ids_by_name(parentId):
                 ouIdByName[ouName] = ouId
         return ouIdByName
     except botocore.exceptions.ClientError as e:
-        print("Failed to organizations.list_organizational_units_for_parent")
-        print(e)
-        return None
+        erm = _fail(e, 'list_organizational_units_for_parent')
+        raise Exception(erm)
 
 def map_account_ids_by_name(parentId, activeOnly=True, createdOnly=True):
     accountIdByName = {}
@@ -67,9 +71,8 @@ def map_account_ids_by_name(parentId, activeOnly=True, createdOnly=True):
                 accountIdByName[accountName] = accountId
         return accountIdByName
     except botocore.exceptions.ClientError as e:
-        print("Failed to organizations.list_accounts_for_parent")
-        print(e)
-        return None
+        erm = _fail(e, 'list_accounts_for_parent')
+        raise Exception(erm)
 
 def map_account_names_by_id_recursive(parentId, excludedOUSet, activeOnly=True, createdOnly=True):
     accountNameById = {}

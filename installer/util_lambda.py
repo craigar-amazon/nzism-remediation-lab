@@ -8,7 +8,7 @@ def _is_resource_not_found(e):
     return e.response['Error']['Code'] == 'ResourceNotFoundException'    
 
 def _fail(e, op, functionName):
-    print("Unexpected error calling "+op)
+    print("Unexpected error calling lambda."+op)
     print("functionName: "+functionName)
     print(e)
     return "Unexpected error calling {} on {}".format(op, functionName)
@@ -23,7 +23,7 @@ def getLambdaFunction(functionName):
         return response
     except botocore.exceptions.ClientError as e:
         if _is_resource_not_found(e): return None
-        erm = _fail(e, 'lambda.get_function', functionName)
+        erm = _fail(e, 'get_function', functionName)
         raise Exception(erm)
 
 # Allow lambda:CreateFunction
@@ -45,7 +45,7 @@ def createLambdaFunction(functionName, roleArn, cfg, codePath):
         )
         return response
     except botocore.exceptions.ClientError as e:
-        erm = _fail(e, 'lambda.create_function', functionName)
+        erm = _fail(e, 'create_function', functionName)
         raise Exception(erm)
 
 # Allow lambda:UpdateFunctionConfiguration

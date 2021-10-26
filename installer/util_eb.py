@@ -2,6 +2,18 @@ import json
 import botocore
 import boto3
 
+def _is_resource_not_found(e):
+    return e.response['Error']['Code'] == 'ResourceNotFoundException'    
+
+def _fail(e, op, eventBusName, ruleName):
+    print("Unexpected error calling events."+op)
+    print("eventBusName: "+eventBusName)
+    if ruleName:
+        print("ruleName: "+ruleName)
+    print(e)
+    return "Unexpected error calling {} on {}".format(op, eventBusName)
+
+
 def getEventBus(eventBusName):
     try:
         eb_client = boto3.client('events')
@@ -10,12 +22,9 @@ def getEventBus(eventBusName):
         )
         return response
     except botocore.exceptions.ClientError as e:
-        if e.response['Error']['Code'] == 'ResourceNotFoundException':
-            return None
-        print("Failed to events.describe_event_bus")
-        print("eventBusName: "+eventBusName)
-        print(e)
-        return None
+        if _is_resource_not_found(e): return None
+        erm = _fail(e, 'describe_event_bus', eventBusName)
+        raise Exception(erm)
 
 def createEventBusArn(eventBusName):
     try:
@@ -25,27 +34,34 @@ def createEventBusArn(eventBusName):
         )
         return response['EventBusArn']
     except botocore.exceptions.ClientError as e:
-        print("Failed to events.create_event_bus")
-        print("eventBusName: "+eventBusName)
-        print(e)
-        raise Exception("Could not create custom event bus '"+eventBusName+"'")
+        erm = _fail(e, 'create_event_bus', eventBusName)
+        raise Exception(erm)
+
+def deleteEventBusRule(eventBusName, ruleName):
+    try:
+        eb_client = boto3.client('events')
+        eb_client.delete_rule(
+            Name=ruleName,
+            EventBusName=eventBusName
+        )
+        return True
+    except botocore.exceptions.ClientError as e:
+        if _is_resource_not_found(e): return False
+        _fail(e, 'delete_rule', eventBusName, ruleName)
+        return False
 
 def deleteEventBus(eventBusName, ruleNames):
     try:
-        eb_client = boto3.client('events')
         for ruleName in ruleNames:
-            eb_client.delete_rule(
-                Name=ruleName,
-                EventBusName=eventBusName
-            )
+            deleteEventBusRule(eventBusName, ruleName)
+        eb_client = boto3.client('events')
         eb_client.delete_event_bus(
             Name=eventBusName
         )
         return True
     except botocore.exceptions.ClientError as e:
-        print("Failed to events.delete_event_bus")
-        print("eventBusName: "+eventBusName)
-        print(e)
+        if _is_resource_not_found(e): return False
+        _fail(e, 'delete_event_bus', eventBusName)
         return False
 
 def declareEventBusArn(eventBusName):
@@ -69,11 +85,8 @@ def putEventBusPermissionForOrganization(eventBusName, organizationId):
             }
         )
     except botocore.exceptions.ClientError as e:
-        print("Failed to events.put_permission")
-        print("eventBusName: "+eventBusName)
-        print("organizationId: "+organizationId)
-        print(e)
-        raise Exception("Could not grant organization permission for custom event bus '"+eventBusName+"'")
+        erm = _fail(e, 'put_permission', eventBusName)
+        raise Exception(erm)
 
 
 # Allow events:PutRule
@@ -89,11 +102,8 @@ def putEventBusRuleArn(eventBusArn, ruleName, eventPatternMap, ruleDescription):
         )
         return response['RuleArn']
     except botocore.exceptions.ClientError as e:
-        print("Failed to events.put_rule")
-        print("eventBusArn: "+eventBusArn)
-        print("ruleName: "+ruleName)
-        print(e)
-        raise Exception("Could not add rule to '"+eventBusArn+"' event bus")
+        erm = _fail(e, 'put_rule', eventBusArn, ruleName)
+        raise Exception(erm)
 
 def putEventBusLambdaTarget(eventBusArn, ruleName, lambdaArn, maxAgeSeconds):
     try:
@@ -112,26 +122,5 @@ def putEventBusLambdaTarget(eventBusArn, ruleName, lambdaArn, maxAgeSeconds):
             ]
         )
     except botocore.exceptions.ClientError as e:
-        print("Failed to events.put_targets")
-        print("eventBusArn: "+eventBusArn)
-        print("ruleName: "+ruleName)
-        print("lambdaArn: "+lambdaArn)
-        print(e)
-        raise Exception("Could not create lambda target for '"+ruleName+"' rule")
-
-
-
-# Statement ID
-# AWSEvents_NZISM-AutoRemediation_Id3be12590-0126-4525-934f-208560e21776
-# Principal
-# events.amazonaws.com
-# Effect
-# Allow
-# Action
-# lambda:InvokeFunction
-# Conditions
-# {
-#  "ArnLike": {
-#   "AWS:SourceArn": "arn:aws:events:ap-southeast-2:775397712397:rule/NZISM-AutoRemediation"
-#  }
-# }
+        erm = _fail(e, 'put_targets', eventBusArn, ruleName)
+        raise Exception(erm)
