@@ -13,11 +13,31 @@ def _fail(e, op, eventBusName, ruleName):
     print(e)
     return "Unexpected error calling {} on {}".format(op, eventBusName)
 
-
-def getEventBus(eventBusName):
+def put_eventbus_target(ctx, eventBusArn, ruleName, targetId, targetArn, maxAgeSeconds):
     try:
-        eb_client = boto3.client('events')
-        response = eb_client.describe_event_bus(
+        client = ctx.session.client('events')
+        client.put_targets(
+            Rule=ruleName,
+            EventBusName=eventBusArn,
+            Targets = [
+                {
+                    'Id': targetId,
+                    'Arn': targetArn,
+                    'RetryPolicy':  {
+                        'MaximumEventAgeInSeconds': maxAgeSeconds
+                    }
+                }
+            ]
+        )
+    except botocore.exceptions.ClientError as e:
+        erm = _fail(e, 'put_targets', eventBusArn, ruleName)
+        raise Exception(erm)
+
+
+def getEventBus(ctx, eventBusName):
+    try:
+        client = ctx.session.client('events')
+        response = client.describe_event_bus(
             Name=eventBusName
         )
         return response
@@ -26,10 +46,10 @@ def getEventBus(eventBusName):
         erm = _fail(e, 'describe_event_bus', eventBusName)
         raise Exception(erm)
 
-def createEventBusArn(eventBusName):
+def createEventBusArn(ctx, eventBusName):
     try:
-        eb_client = boto3.client('events')
-        response = eb_client.create_event_bus(
+        client = ctx.session.client('events')
+        response = client.create_event_bus(
             Name=eventBusName
         )
         return response['EventBusArn']
@@ -37,10 +57,10 @@ def createEventBusArn(eventBusName):
         erm = _fail(e, 'create_event_bus', eventBusName)
         raise Exception(erm)
 
-def deleteEventBusRule(eventBusName, ruleName):
+def deleteEventBusRule(ctx, eventBusName, ruleName):
     try:
-        eb_client = boto3.client('events')
-        eb_client.delete_rule(
+        client = ctx.session.client('events')
+        client.delete_rule(
             Name=ruleName,
             EventBusName=eventBusName
         )
@@ -50,12 +70,12 @@ def deleteEventBusRule(eventBusName, ruleName):
         _fail(e, 'delete_rule', eventBusName, ruleName)
         return False
 
-def deleteEventBus(eventBusName, ruleNames):
+def deleteEventBus(ctx, eventBusName, ruleNames):
     try:
         for ruleName in ruleNames:
             deleteEventBusRule(eventBusName, ruleName)
-        eb_client = boto3.client('events')
-        eb_client.delete_event_bus(
+        client = ctx.session.client('events')
+        client.delete_event_bus(
             Name=eventBusName
         )
         return True
@@ -64,16 +84,16 @@ def deleteEventBus(eventBusName, ruleNames):
         _fail(e, 'delete_event_bus', eventBusName)
         return False
 
-def declareEventBusArn(eventBusName):
-    eventBus = getEventBus(eventBusName)
+def declareEventBusArn(ctx, eventBusName):
+    eventBus = getEventBus(ctx, eventBusName)
     if eventBus: return eventBus['Arn']
-    return createEventBusArn(eventBusName)
+    return createEventBusArn(ctx, eventBusName)
 
 
-def putEventBusPermissionForOrganization(eventBusName, organizationId):
+def putEventBusPermissionForOrganization(ctx, eventBusName, organizationId):
     try:
-        eb_client = boto3.client('events')
-        eb_client.put_permission(
+        client = ctx.session.client('events')
+        client.put_permission(
             EventBusName=eventBusName,
             Principal = '*',
             Action = 'events:PutEvents',
@@ -90,11 +110,11 @@ def putEventBusPermissionForOrganization(eventBusName, organizationId):
 
 
 # Allow events:PutRule
-def putEventBusRuleArn(eventBusArn, ruleName, eventPatternMap, ruleDescription):
+def putEventBusRuleArn(ctx, eventBusArn, ruleName, eventPatternMap, ruleDescription):
     eventPatternJson = json.dumps(eventPatternMap)
     try:
-        eb_client = boto3.client('events')
-        response = eb_client.put_rule(
+        client = ctx.session.client('events')
+        response = client.put_rule(
             Name=ruleName,
             EventPattern=eventPatternJson,
             Description=ruleDescription, 
@@ -105,22 +125,9 @@ def putEventBusRuleArn(eventBusArn, ruleName, eventPatternMap, ruleDescription):
         erm = _fail(e, 'put_rule', eventBusArn, ruleName)
         raise Exception(erm)
 
-def putEventBusLambdaTarget(eventBusArn, ruleName, lambdaArn, maxAgeSeconds):
-    try:
-        eb_client = boto3.client('events')
-        eb_client.put_targets(
-            Rule=ruleName,
-            EventBusName=eventBusArn,
-            Targets = [
-                {
-                    'Id': 'Lambda',
-                    'Arn': lambdaArn,
-                    'RetryPolicy':  {
-                        'MaximumEventAgeInSeconds': maxAgeSeconds
-                    }
-                }
-            ]
-        )
-    except botocore.exceptions.ClientError as e:
-        erm = _fail(e, 'put_targets', eventBusArn, ruleName)
-        raise Exception(erm)
+
+def putEventBusLambdaTarget(ctx, eventBusArn, ruleName, lambdaArn, maxAgeSeconds):
+    put_eventbus_target(ctx, eventBusArn, ruleName, 'Lambda', lambdaArn, maxAgeSeconds)
+
+def putEventBusSQSTarget(ctx, eventBusArn, ruleName, sqsArn, maxAgeSeconds):
+    put_eventbus_target(ctx, eventBusArn, ruleName, 'Queue', sqsArn, maxAgeSeconds)

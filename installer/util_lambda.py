@@ -1,6 +1,5 @@
 import json
 import botocore
-import boto3
 
 from util_file import getZipCodeBytes
 
@@ -14,10 +13,10 @@ def _fail(e, op, functionName):
     return "Unexpected error calling {} on {}".format(op, functionName)
 
 # Allow lambda:GetFunction
-def getLambdaFunction(functionName):
+def getLambdaFunction(ctx, functionName):
     try:
-        lambda_client = boto3.client('lambda')
-        response = lambda_client.get_function(
+        client = ctx.session.client('lambda')
+        response = client.get_function(
             FunctionName=functionName
         )
         return response
@@ -27,11 +26,11 @@ def getLambdaFunction(functionName):
         raise Exception(erm)
 
 # Allow lambda:CreateFunction
-def createLambdaFunction(functionName, roleArn, cfg, codePath):
+def createLambdaFunction(ctx, functionName, roleArn, cfg, codePath):
     zipBytes = getZipCodeBytes(codePath, functionName)
     try:
-        lambda_client = boto3.client('lambda')
-        response = lambda_client.create_function(
+        client = ctx.session.client('lambda')
+        response = client.create_function(
             FunctionName=functionName,
             Runtime=cfg['Runtime'],
             Role=roleArn,
@@ -49,10 +48,10 @@ def createLambdaFunction(functionName, roleArn, cfg, codePath):
         raise Exception(erm)
 
 # Allow lambda:UpdateFunctionConfiguration
-def updateLambdaFunctionConfiguration(functionName, roleArn, cfg):
+def updateLambdaFunctionConfiguration(ctx, functionName, roleArn, cfg):
     try:
-        lambda_client = boto3.client('lambda')
-        response = lambda_client.update_function_configuration(
+        client = ctx.session.client('lambda')
+        response = client.update_function_configuration(
             FunctionName=functionName,
             Runtime=cfg['Runtime'],
             Role=roleArn,
@@ -67,11 +66,11 @@ def updateLambdaFunctionConfiguration(functionName, roleArn, cfg):
         raise Exception(erm)
 
 # Allow lambda:UpdateFunctionCode
-def updateLambdaFunctionCode(functionName, codePath):
+def updateLambdaFunctionCode(ctx, functionName, codePath):
     zipBytes = getZipCodeBytes(codePath, functionName)
     try:
-        lambda_client = boto3.client('lambda')
-        response = lambda_client.update_function_code(
+        client = ctx.session.client('lambda')
+        response = client.update_function_code(
             FunctionName=functionName,
             ZipFile=zipBytes
         )
@@ -80,10 +79,10 @@ def updateLambdaFunctionCode(functionName, codePath):
         erm = _fail(e, 'update_function_code', functionName)
         raise Exception(erm)
 
-def getLambdaPolicy(functionArn):
+def getLambdaPolicy(ctx, functionArn):
     try:
-        lambda_client = boto3.client('lambda')
-        response = lambda_client.get_policy(
+        client = ctx.session.client('lambda')
+        response = client.get_policy(
             FunctionName=functionArn
         )
         return response
@@ -92,10 +91,10 @@ def getLambdaPolicy(functionArn):
         erm = _fail(e, 'get_policy', functionArn)
         raise Exception(erm)
 
-def removeLambdaPolicy(functionArn, sid):
+def removeLambdaPolicy(ctx, functionArn, sid):
     try:
-        lambda_client = boto3.client('lambda')
-        lambda_client.remove_permission(
+        client = ctx.session.client('lambda')
+        client.remove_permission(
             FunctionName=functionArn,
             StatementId = sid
         )
@@ -105,10 +104,10 @@ def removeLambdaPolicy(functionArn, sid):
         erm = _fail(e, 'remove_permission', functionArn)
         raise Exception(erm)
 
-def addLambdaPolicyForEventRule(functionArn, sid, ruleArn):
+def addLambdaPolicyForEventRule(ctx, functionArn, sid, ruleArn):
     try:
-        lambda_client = boto3.client('lambda')
-        lambda_client.add_permission(
+        client = ctx.session.client('lambda')
+        client.add_permission(
             FunctionName=functionArn,
             StatementId = sid,
             Action = "lambda:InvokeFunction",
@@ -120,17 +119,17 @@ def addLambdaPolicyForEventRule(functionArn, sid, ruleArn):
         raise Exception(erm)
 
 
-def declareLambdaPolicyForEventRule(functionArn, ruleArn):
+def declareLambdaPolicyForEventRule(ctx, functionArn, ruleArn):
     sid = 'EventRule'
-    removeLambdaPolicy(functionArn, sid)
-    addLambdaPolicyForEventRule(functionArn, sid, ruleArn)
+    removeLambdaPolicy(ctx, functionArn, sid)
+    addLambdaPolicyForEventRule(ctx, functionArn, sid, ruleArn)
 
 
 # Allow lambda:DeleteFunction
-def deleteLambdaFunction(functionName):
+def deleteLambdaFunction(ctx, functionName):
     try:
-        lambda_client = boto3.client('lambda')
-        lambda_client.delete_function(
+        client = ctx.session.client('lambda')
+        client.delete_function(
             FunctionName=functionName
         )
         return True
@@ -138,20 +137,19 @@ def deleteLambdaFunction(functionName):
         _fail(e, 'delete_function', functionName)
         return False
 
-def declareLambdaFunctionArn(functionName, roleArn, cfg, codePath):
-    lambdafn = getLambdaFunction(functionName)
+def declareLambdaFunctionArn(ctx, functionName, roleArn, cfg, codePath):
+    lambdafn = getLambdaFunction(ctx, functionName)
     if lambdafn:
-        updateLambdaFunctionConfiguration(functionName, roleArn, cfg)
-        updateLambdaFunctionCode(functionName, codePath)
+        updateLambdaFunctionConfiguration(ctx, functionName, roleArn, cfg)
+        updateLambdaFunctionCode(ctx, functionName, codePath)
         return lambdafn['Configuration']['FunctionArn']
-    lambdafnNew = createLambdaFunction(functionName, roleArn, cfg, codePath)
-    if lambdafnNew: return lambdafnNew['FunctionArn']
-    raise Exception("Could not create lambda '"+functionName+"'")
+    lambdafnNew = createLambdaFunction(ctx, functionName, roleArn, cfg, codePath)
+    return lambdafnNew['FunctionArn']
 
-def invokeLambdaFunction(functionName, payloadMap):
+def invokeLambdaFunction(ctx, functionName, payloadMap):
     try:
-        lambda_client = boto3.client('lambda')
-        response = lambda_client.invoke(
+        client = ctx.session.client('lambda')
+        response = client.invoke(
             FunctionName=functionName,
             InvocationType='RequestResponse',
             Payload=json.dumps(payloadMap).encode("utf-8")

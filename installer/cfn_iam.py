@@ -52,18 +52,3 @@ def resourceRole(roleName, roleDescription, trustPolicyMap, permissions):
     }
   }
 
-
-# {
-#     "Version": "2012-10-17",
-#     "Statement": [
-#         {
-#             "Effect": "Allow",
-#             "Action": [
-#                 "events:PutEvents"
-#             ],
-#             "Resource": [
-#                 "arn:aws:events:ap-southeast-2:746869318262:event-bus/NZISM-AutoRemediation"
-#             ]
-#         }
-#     ]
-# }

@@ -2,12 +2,14 @@ import cfn_core as cfn
 import cfn_iam as ci
 import cfn_eb as ce
 
+from util_base import Context
+import util_kms as uk 
 import util_cfn as uc
 import util_iam as ui
 import util_lambda as ul
 import util_eb as ue
 import util_org as uo
-
+import util_sqs as uq
 
 def get_lambda_config():
     return {
@@ -131,7 +133,62 @@ def test_exec_lambda():
     ul.invokeLambdaFunction(lambdaFunctionName, payload)
 
 
-test_deploy_lambda()
+def test_deploy_local_eventBusQ(lambdaArn, organizationId):
+
+    eventBusName = 'NZISM-AutoRemediation'
+    ruleName = 'ComplianceChange'
+    ruleDescription = "Config Rule Compliance Change"
+    eventPattern = {
+    'source': ["aws.config"],
+    'detail-type': ["Config Rules Compliance Change"]
+    }
+    maxAgeSecs = 12 * 3600
+    ebArn = ue.declareEventBusArn(eventBusName)
+    ue.putEventBusPermissionForOrganization(eventBusName, organizationId)
+    print(ebArn)
+    ruleArn = ue.putEventBusRuleArn(ebArn, ruleName, eventPattern, ruleDescription)
+    ul.declareLambdaPolicyForEventRule(lambdaArn, ruleArn)
+
+    ue.putEventBusLambdaTarget(ebArn, ruleName, lambdaArn, maxAgeSecs)  
+
+    # deleteEventBus(eventBusName, [ruleName])
+
+
+def test_deploy_local_eventBusQ():
+    region = 'ap-southeast-2'
+    eventBusName = 'NZISM-AutoRemediationQ'
+    ruleName = 'ComplianceChange'
+    ruleDescription = "Config Rule Compliance Change"
+    eventPattern = {
+    'source': ["aws.config"],
+    'detail-type': ["Config Rules Compliance Change"]
+    }
+    maxAgeSecs = 12 * 3600
+    queueName = 'ComplianceChangeQueue'
+    sqsCmkDescription = "Encryption for SQS queued events"
+    sqsCmkAlias = "queued_events"
+    sqsVisibilityTimeoutSecs = 15 * 60
+
+    ctx = Context('ap-southeast-2')
+
+    ebArn = ue.declareEventBusArn(ctx, eventBusName)
+    ruleArn = ue.putEventBusRuleArn(ctx, ebArn, ruleName, eventPattern, ruleDescription)
+
+    sqsCmkStatements = [
+        uk.policyStatementEventbridge()
+    ]
+    sqscmkArn = uk.declareCMK(ctx, sqsCmkDescription, sqsCmkAlias, sqsCmkStatements)
+
+    sqsStatements = [
+        uq.policyStatementEventbridge(ctx, queueName, ruleArn)
+    ]
+
+    sqsArn = uq.declareQueue(ctx, queueName, sqscmkArn, sqsStatements, sqsVisibilityTimeoutSecs)
+
+    ue.putEventBusSQSTarget(ctx, ebArn, ruleName, sqsArn, maxAgeSecs)
+
+test_deploy_local_eventBusQ()
+
 
 
 def sample_cloudwatch_log_group_encrypted():

@@ -1,0 +1,54 @@
+{
+    "Version": "2012-10-17",
+    "Id": "AWSConsole-AccessLogs-Policy",
+    "Statement": [
+        {
+            "Sid": "AWSLogDeliveryAccount",
+            "Effect": "Allow",
+            "Principal": {
+                "COMMENT": "<-ap-southeast-2 designated account see https://docs.aws.amazon.com/elasticloadbalancing/latest/application/load-balancer-access-logs.html",
+                "AWS": "arn:aws:iam::783225319266:root"
+            },
+            "Action": "s3:PutObject",
+            "Resource": "arn:aws:s3:::hip-moh-govt-nz-uat-alb-logs/AWSLogs/248882625791/*"
+        },
+        {
+            "Sid": "AWSLogDeliveryWrite",
+            "Effect": "Allow",
+            "Principal": {
+                "Service": "delivery.logs.amazonaws.com"
+            },
+            "Action": "s3:PutObject",
+            "Resource": "arn:aws:s3:::hip-moh-govt-nz-uat-alb-logs/AWSLogs/248882625791/*",
+            "Condition": {
+                "StringEquals": {
+                    "s3:x-amz-acl": "bucket-owner-full-control"
+                }
+            }
+        },
+        {
+            "Sid": "AWSLogDeliveryAclCheck",
+            "Effect": "Allow",
+            "Principal": {
+                "Service": "delivery.logs.amazonaws.com"
+            },
+            "Action": "s3:GetBucketAcl",
+            "Resource": "arn:aws:s3:::hip-moh-govt-nz-uat-alb-logs"
+        },
+        {
+            "Sid": "AllowSSLRequestsOnly",
+            "Effect": "Deny",
+            "Principal": "*",
+            "Action": "s3:*",
+            "Resource": [
+                "arn:aws:s3:::hip-moh-govt-nz-uat-alb-logs",
+                "arn:aws:s3:::hip-moh-govt-nz-uat-alb-logs/*"
+            ],
+            "Condition": {
+                "Bool": {
+                    "aws:SecureTransport": "false"
+                }
+            }
+        }
+    ]
+}
