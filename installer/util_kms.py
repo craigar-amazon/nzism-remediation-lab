@@ -32,8 +32,10 @@ def policy_map(statements):
     'Statement': statements
     }
 
-def policyStatementService(serviceName):
-    sid = "Producer service "+serviceName
+def policyStatementProducerService(ctx, serviceName, contextKey):
+    sid = "Producer service " + serviceName
+    conditionKey = "kms:EncryptionContext:aws:{}:arn".format(contextKey)
+    conditionValue = "arn:aws:{}:{}:{}:*".format(contextKey, ctx.regionName, ctx.accountId)
     return {
         'Sid': sid,
         'Effect': "Allow",
@@ -45,11 +47,16 @@ def policyStatementService(serviceName):
             "kms:GenerateDataKey"
 
         ],
-        'Resource': '*'
+        'Resource': '*',
+        'Condition': {
+            'ArnLike': {
+                conditionKey: conditionValue
+            }
+        }
     }
 
-def policyStatementEventbridge():
-    return policyStatementService("events.amazonaws.com")
+def policyStatementEventbridgeToSQS(ctx):
+    return policyStatementProducerService(ctx, "events.amazonaws.com", "sqs")
 
 def canon_alias(aliasName):
     return "alias/"+aliasName

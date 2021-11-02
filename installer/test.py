@@ -133,7 +133,7 @@ def test_exec_lambda():
     ul.invokeLambdaFunction(lambdaFunctionName, payload)
 
 
-def test_deploy_local_eventBusQ(lambdaArn, organizationId):
+def test_deploy_local_eventBusX(lambdaArn, organizationId):
 
     eventBusName = 'NZISM-AutoRemediation'
     ruleName = 'ComplianceChange'
@@ -154,9 +154,20 @@ def test_deploy_local_eventBusQ(lambdaArn, organizationId):
     # deleteEventBus(eventBusName, [ruleName])
 
 
-def test_deploy_local_eventBusQ():
+def test_deploy_queue():
+    queueName = 'test1'
+    ruleArn = 'arn:aws:events:ap-southeast-2:746869318262:rule/NZISM-AutoRemediation/ComplianceChange'
+    cmk = 'arn:aws:kms:ap-southeast-2:746869318262:key/92f0ab35-5b92-41c2-969d-a7a16a9dc9e7'
+    ctx = Context()
+    sqsStatements = [ uq.policyStatementEventbridge(ctx, queueName, ruleArn) ]
+    sqsVisibilityTimeoutSecs = 15 * 60
+    arn = uq.declareQueue(ctx, queueName, cmk, sqsStatements, sqsVisibilityTimeoutSecs)
+    print(arn)
+    uq.deleteQueue(ctx, queueName)
+
+def test_deploy_local_eventBus():
     region = 'ap-southeast-2'
-    eventBusName = 'NZISM-AutoRemediationQ'
+    eventBusName = 'NZISM-AutoRemediation'
     ruleName = 'ComplianceChange'
     ruleDescription = "Config Rule Compliance Change"
     eventPattern = {
@@ -169,25 +180,21 @@ def test_deploy_local_eventBusQ():
     sqsCmkAlias = "queued_events"
     sqsVisibilityTimeoutSecs = 15 * 60
 
-    ctx = Context('ap-southeast-2')
+    ctx = Context(region)
 
     ebArn = ue.declareEventBusArn(ctx, eventBusName)
     ruleArn = ue.putEventBusRuleArn(ctx, ebArn, ruleName, eventPattern, ruleDescription)
 
-    sqsCmkStatements = [
-        uk.policyStatementEventbridge()
-    ]
+    sqsCmkStatements = [ uk.policyStatementEventbridgeToSQS(ctx) ]
     sqscmkArn = uk.declareCMK(ctx, sqsCmkDescription, sqsCmkAlias, sqsCmkStatements)
 
-    sqsStatements = [
-        uq.policyStatementEventbridge(ctx, queueName, ruleArn)
-    ]
+    sqsStatements = [ uq.policyStatementEventbridge(ctx, queueName, ruleArn) ]
 
     sqsArn = uq.declareQueue(ctx, queueName, sqscmkArn, sqsStatements, sqsVisibilityTimeoutSecs)
 
     ue.putEventBusSQSTarget(ctx, ebArn, ruleName, sqsArn, maxAgeSecs)
 
-test_deploy_local_eventBusQ()
+test_deploy_local_eventBus()
 
 
 

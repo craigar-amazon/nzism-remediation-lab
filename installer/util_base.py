@@ -2,7 +2,7 @@ import botocore
 import boto3.session as session
 
 class Context:
-    def __init__(self, regionName):
+    def __init__(self, regionName='ap-southeast-2'):
         self._regionName = regionName
         self._session= session.Session(region_name=regionName)
         try:

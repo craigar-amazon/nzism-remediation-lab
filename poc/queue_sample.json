@@ -1,0 +1,48 @@
+{
+    "version": "0",
+    "id": "1cccd43c-e7dc-a6be-4034-612ef2d862d5",
+    "detail-type": "Config Rules Compliance Change",
+    "source": "aws.config",
+    "account": "746869318262",
+    "time": "2021-11-01T06:45:52Z",
+    "region": "ap-southeast-2",
+    "resources": [],
+    "detail": {
+        "resourceId": "dev1",
+        "awsRegion": "ap-southeast-2",
+        "awsAccountId": "746869318262",
+        "configRuleName": "cw-loggroup-retention-period-check-conformance-pack-qayjyopmd",
+        "recordVersion": "1.0",
+        "configRuleARN": "arn:aws:config:ap-southeast-2:746869318262:config-rule/aws-service-rule/config-conforms.amazonaws.com/config-rule-vlxixs",
+        "messageType": "ComplianceChangeNotification",
+        "newEvaluationResult": {
+            "evaluationResultIdentifier": {
+                "evaluationResultQualifier": {
+                    "configRuleName": "cw-loggroup-retention-period-check-conformance-pack-qayjyopmd",
+                    "resourceType": "AWS::Logs::LogGroup",
+                    "resourceId": "dev1"
+                },
+                "orderingTimestamp": "2021-11-01T06:45:35.797Z"
+            },
+            "complianceType": "NON_COMPLIANT",
+            "resultRecordedTime": "2021-11-01T06:45:51.716Z",
+            "configRuleInvokedTime": "2021-11-01T06:45:51.210Z",
+            "annotation": "retentionInDays is less than MinRetentionTime 545 days. Current retentionInDays: 30 days"
+        },
+        "oldEvaluationResult": {
+            "evaluationResultIdentifier": {
+                "evaluationResultQualifier": {
+                    "configRuleName": "cw-loggroup-retention-period-check-conformance-pack-qayjyopmd",
+                    "resourceType": "AWS::Logs::LogGroup",
+                    "resourceId": "dev1"
+                },
+                "orderingTimestamp": "2021-11-01T06:29:55.245Z"
+            },
+            "complianceType": "COMPLIANT",
+            "resultRecordedTime": "2021-11-01T06:30:14.096Z",
+            "configRuleInvokedTime": "2021-11-01T06:30:12.603Z"
+        },
+        "notificationCreationTime": "2021-11-01T06:45:52.018Z",
+        "resourceType": "AWS::Logs::LogGroup"
+    }
+}
