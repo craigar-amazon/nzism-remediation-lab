@@ -395,6 +395,9 @@ def declareInlinePoliciesForRole(ctx, roleName, inlinePolicyMap):
         if not (exName in inlinePolicyMap):
             delete_role_inline_policy(ctx, roleName, exName)
 
+def declarePoliciesForRole(ctx, roleName, managedPolicyArns, inlinePolicyMap):
+    declareManagedPoliciesForRole(ctx, roleName, managedPolicyArns)
+    declareInlinePoliciesForRole(ctx, roleName, inlinePolicyMap)
 
 def deleteRole(ctx, roleName):
     declareManagedPoliciesForRole(ctx, roleName, [])
