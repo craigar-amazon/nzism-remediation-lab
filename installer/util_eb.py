@@ -15,7 +15,7 @@ def _fail(e, op, eventBusName, ruleName):
 
 def put_eventbus_target(ctx, eventBusArn, ruleName, targetId, targetArn, maxAgeSeconds):
     try:
-        client = ctx.session.client('events')
+        client = ctx.client('events')
         client.put_targets(
             Rule=ruleName,
             EventBusName=eventBusArn,
@@ -36,7 +36,7 @@ def put_eventbus_target(ctx, eventBusArn, ruleName, targetId, targetArn, maxAgeS
 
 def getEventBus(ctx, eventBusName):
     try:
-        client = ctx.session.client('events')
+        client = ctx.client('events')
         response = client.describe_event_bus(
             Name=eventBusName
         )
@@ -48,7 +48,7 @@ def getEventBus(ctx, eventBusName):
 
 def createEventBusArn(ctx, eventBusName):
     try:
-        client = ctx.session.client('events')
+        client = ctx.client('events')
         response = client.create_event_bus(
             Name=eventBusName
         )
@@ -59,7 +59,7 @@ def createEventBusArn(ctx, eventBusName):
 
 def deleteEventBusRule(ctx, eventBusName, ruleName):
     try:
-        client = ctx.session.client('events')
+        client = ctx.client('events')
         client.delete_rule(
             Name=ruleName,
             EventBusName=eventBusName
@@ -74,7 +74,7 @@ def deleteEventBus(ctx, eventBusName, ruleNames):
     try:
         for ruleName in ruleNames:
             deleteEventBusRule(eventBusName, ruleName)
-        client = ctx.session.client('events')
+        client = ctx.client('events')
         client.delete_event_bus(
             Name=eventBusName
         )
@@ -92,7 +92,7 @@ def declareEventBusArn(ctx, eventBusName):
 
 def putEventBusPermissionForOrganization(ctx, eventBusName, organizationId):
     try:
-        client = ctx.session.client('events')
+        client = ctx.client('events')
         client.put_permission(
             EventBusName=eventBusName,
             Principal = '*',
@@ -113,7 +113,7 @@ def putEventBusPermissionForOrganization(ctx, eventBusName, organizationId):
 def putEventBusRuleArn(ctx, eventBusArn, ruleName, eventPatternMap, ruleDescription):
     eventPatternJson = json.dumps(eventPatternMap)
     try:
-        client = ctx.session.client('events')
+        client = ctx.client('events')
         response = client.put_rule(
             Name=ruleName,
             EventPattern=eventPatternJson,

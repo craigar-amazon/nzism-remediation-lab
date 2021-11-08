@@ -11,6 +11,9 @@ class Context:
             self._userId = r['UserId']
             self._accountId = r['Account']
             self._arn = r['Arn']
+            self._clientMap = {
+                'sts': sts_client
+            }
         except botocore.exceptions.ClientError as e:
             erc = e.response['Error']['Code'] 
             if erc == 'ExpiredToken':
@@ -27,6 +30,10 @@ class Context:
     def regionName(self):
         return self._regionName
 
-    @property
-    def session(self):
-        return self._session
+    def client(self, service_name):
+        if service_name in self._clientMap:
+            return self._clientMap[service_name]
+        
+        client = self._session.client(service_name)
+        self._clientMap[service_name] = client
+        return client

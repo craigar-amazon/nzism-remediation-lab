@@ -55,9 +55,9 @@ def declareStackSetIdForOrganization(stackSetName, templateMap, stackSetDescript
     create_stack_instances_for_organization(stackSetName, orgunitids, regions)
     return stacksetId
 
-def describe_stackset_for_organization(stackSetName):
+def describe_stackset_for_organization(ctx, stackSetName):
     try:
-        cfn_client = boto3.client('cloudformation')
+        cfn_client = ctx.client('cloudformation')
         response = cfn_client.describe_stack_set(
             StackSetName=stackSetName,
             CallAs='DELEGATED_ADMIN'
@@ -69,9 +69,9 @@ def describe_stackset_for_organization(stackSetName):
         raise Exception(erm)
 
 
-def create_stackset_id_for_organization(stackSetName, reqd):
+def create_stackset_id_for_organization(ctx, stackSetName, reqd):
     try:
-        cfn_client = boto3.client('cloudformation')
+        cfn_client = ctx.client('cloudformation')
         response = cfn_client.create_stack_set(
             StackSetName=stackSetName,
             Description=reqd['Description'],
@@ -89,9 +89,9 @@ def create_stackset_id_for_organization(stackSetName, reqd):
         erm = _fail(e, 'create_stack_set', stackSetName)
         raise Exception(erm)
 
-def create_stack_instances_for_organization(stackSetName, orgunitids, regions):
+def create_stack_instances_for_organization(ctx, stackSetName, orgunitids, regions):
     try:
-        cfn_client = boto3.client('cloudformation')
+        cfn_client = ctx.client('cloudformation')
         cfn_client.create_stack_instances(
             StackSetName=stackSetName,
             DeploymentTargets={
@@ -105,9 +105,9 @@ def create_stack_instances_for_organization(stackSetName, orgunitids, regions):
         raise Exception(erm)
 
 
-def update_stackset_id_for_organization(stackSetName, reqd):
+def update_stackset_id_for_organization(ctx, stackSetName, reqd):
     try:
-        cfn_client = boto3.client('cloudformation')
+        cfn_client = ctx.client('cloudformation')
         cfn_client.update_stack_set(
             StackSetName=stackSetName,
             Description=reqd['Description'],
@@ -124,9 +124,9 @@ def update_stackset_id_for_organization(stackSetName, reqd):
         erm = _fail(e, 'update_stack_set', stackSetName)
         raise Exception(erm)
 
-def delete_stack_instances_for_organization(stackSetName, orgunitids, regions):
+def delete_stack_instances_for_organization(ctx, stackSetName, orgunitids, regions):
     try:
-        cfn_client = boto3.client('cloudformation')
+        cfn_client = ctx.client('cloudformation')
         cfn_client.delete_stack_instances(
             StackSetName=stackSetName,
             DeploymentTargets={
@@ -143,9 +143,9 @@ def delete_stack_instances_for_organization(stackSetName, orgunitids, regions):
         raise Exception(erm)
 
 
-def delete_stackset_for_organization(stackSetName):
+def delete_stackset_for_organization(ctx, stackSetName):
     try:
-        cfn_client = boto3.client('cloudformation')
+        cfn_client = ctx.client('cloudformation')
         cfn_client.delete_stack_set(
             StackSetName=stackSetName,
             CallAs='DELEGATED_ADMIN'

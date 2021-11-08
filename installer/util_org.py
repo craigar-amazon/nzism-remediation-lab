@@ -9,9 +9,9 @@ def _fail(e, op, id):
     print(e)
     return "Unexpected error calling {}".format(op)
 
-def describe_organization():
+def describe_organization(ctx):
     try:
-        org_client = boto3.client('organizations')
+        org_client = ctx.client('organizations')
         response = org_client.describe_organization()
         r = response['Organization']
         return r
@@ -19,10 +19,10 @@ def describe_organization():
         erm = _fail(e, 'describe_organization')
         raise Exception(erm)
 
-def map_root_ids_by_name():
+def map_root_ids_by_name(ctx):
     rootIdByName = {}
     try:
-        org_client = boto3.client('organizations')
+        org_client = ctx.client('organizations')
         paginator_roots = org_client.get_paginator("list_roots")
         page_iterator_roots = paginator_roots.paginate()
         for page_roots in page_iterator_roots:
@@ -36,10 +36,10 @@ def map_root_ids_by_name():
         erm = _fail(e, 'list_roots')
         raise Exception(erm)
 
-def map_ou_ids_by_name(parentId):
+def map_ou_ids_by_name(ctx, parentId):
     ouIdByName = {}
     try:
-        org_client = boto3.client('organizations')
+        org_client = ctx.client('organizations')
         paginator_ous = org_client.get_paginator("list_organizational_units_for_parent")
         page_iterator_ous = paginator_ous.paginate(ParentId=parentId)
         for page_ous in page_iterator_ous:
@@ -53,10 +53,10 @@ def map_ou_ids_by_name(parentId):
         erm = _fail(e, 'list_organizational_units_for_parent')
         raise Exception(erm)
 
-def map_account_ids_by_name(parentId, activeOnly=True, createdOnly=True):
+def map_account_ids_by_name(ctx, parentId, activeOnly=True, createdOnly=True):
     accountIdByName = {}
     try:
-        org_client = boto3.client('organizations')
+        org_client = ctx.client('organizations')
         paginator_accounts = org_client.get_paginator("list_accounts_for_parent")
         page_iterator_accounts = paginator_accounts.paginate(ParentId=parentId)
         for page_accounts in page_iterator_accounts:
@@ -74,34 +74,34 @@ def map_account_ids_by_name(parentId, activeOnly=True, createdOnly=True):
         erm = _fail(e, 'list_accounts_for_parent')
         raise Exception(erm)
 
-def map_account_names_by_id_recursive(parentId, excludedOUSet, activeOnly=True, createdOnly=True):
+def map_account_names_by_id_recursive(ctx, parentId, excludedOUSet, activeOnly=True, createdOnly=True):
     accountNameById = {}
-    accountIdByName = map_account_ids_by_name(parentId, activeOnly, createdOnly)
+    accountIdByName = map_account_ids_by_name(ctx, parentId, activeOnly, createdOnly)
     for accountName in accountIdByName:
         accountId = accountIdByName[accountName]
         accountNameById[accountId] = accountName
-    ouIdsByName = map_ou_ids_by_name(parentId)
+    ouIdsByName = map_ou_ids_by_name(ctx, parentId)
     for ouName in ouIdsByName:
         if ouName in excludedOUSet:
             continue
         ouId = ouIdsByName[ouName]
-        accountNameByIdSub = map_account_names_by_id_recursive(ouId, excludedOUSet, activeOnly, createdOnly)
+        accountNameByIdSub = map_account_names_by_id_recursive(ctx, ouId, excludedOUSet, activeOnly, createdOnly)
         for accountIdSub in accountNameByIdSub:
             accountNameById[accountIdSub] = accountNameByIdSub[accountIdSub]
     return accountNameById
 
 
 
-def describeLandingZone(excludedOUNames=[], securityOUName='Security', auditAccountName='Audit', logArchiveAccountName='Log Archive', rootName='Root'):
+def describeLandingZone(ctx, excludedOUNames=[], securityOUName='Security', auditAccountName='Audit', logArchiveAccountName='Log Archive', rootName='Root'):
     lz = {}
     lz['ExcludedOUNames'] = excludedOUNames
-    mgmt = describe_organization()
+    mgmt = describe_organization(ctx)
     if not mgmt:
         raise Exception("Cannot determine Organization information")
     lz['OrganizationId'] = mgmt['Id']
     lz['MasterAccountId'] = mgmt['MasterAccountId']
     lz['MasterAccountEmail'] = mgmt['MasterAccountEmail']
-    rootIdsByName = map_root_ids_by_name()
+    rootIdsByName = map_root_ids_by_name(ctx)
     if not (rootName in rootIdsByName):
         print("Id for named Organization Root not found")
         print("rootName: "+rootName)
@@ -110,7 +110,7 @@ def describeLandingZone(excludedOUNames=[], securityOUName='Security', auditAcco
     lz['RootName'] = rootName
     lz['RootId'] = rootId
 
-    ouIdsByName = map_ou_ids_by_name(rootId)
+    ouIdsByName = map_ou_ids_by_name(ctx, rootId)
     if not (securityOUName in ouIdsByName):
         print("Security OU for Landing Zone not found")
         print("Security OU Name: "+securityOUName)
@@ -119,7 +119,7 @@ def describeLandingZone(excludedOUNames=[], securityOUName='Security', auditAcco
     lz['SecurityOUName'] = securityOUName
     lz['SecurityOUId'] = securityOUId
 
-    securityAccountIdsByName = map_account_ids_by_name(securityOUId)
+    securityAccountIdsByName = map_account_ids_by_name(ctx, securityOUId)
     if not (auditAccountName in securityAccountIdsByName):
         print("Audit Account for Landing Zone not found")
         print("Audit Account Name: "+auditAccountName)
@@ -152,7 +152,7 @@ def describeLandingZone(excludedOUNames=[], securityOUName='Security', auditAcco
         if ouName in excludedOUNameSet:
             continue
         ouId = ouIdsByName[ouName]
-        accountNameById = map_account_names_by_id_recursive(ouId, excludedOUNameSet, True, True)
+        accountNameById = map_account_names_by_id_recursive(ctx, ouId, excludedOUNameSet, True, True)
         ouNode = {}
         ouNode['OUName'] = ouName
         ouNode['OUAccountsById'] = accountNameById

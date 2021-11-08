@@ -15,7 +15,7 @@ def get_lambda_config():
     return {
         'Runtime': 'python3.8',
         'Handler': 'lambda_function.lambda_handler',
-        'Timeout': 600,
+        'Timeout': 180,
         'Description': "Remediates non-compliant resources based on NZISM controls",
         'MemorySize': 128
     }
@@ -163,7 +163,7 @@ def test_deploy_queue():
     sqsVisibilityTimeoutSecs = 15 * 60
     arn = uq.declareQueue(ctx, queueName, cmk, sqsStatements, sqsVisibilityTimeoutSecs)
     print(arn)
-    uq.deleteQueue(ctx, queueName)
+    # uq.deleteQueue(ctx, queueName)
 
 def test_deploy_local_eventBus():
     region = 'ap-southeast-2'
@@ -194,7 +194,34 @@ def test_deploy_local_eventBus():
 
     ue.putEventBusSQSTarget(ctx, ebArn, ruleName, sqsArn, maxAgeSecs)
 
-test_deploy_local_eventBus()
+
+def test_lambda_policy():
+    lambdaPolicyName = 'AWSLambdaBasicExecutionRole'
+    ctx = Context()
+    lambaPolicyArn = ui.declareAwsPolicyArn(ctx, lambdaPolicyName)
+    print(lambaPolicyArn)
+
+def test_policy_declare():
+    policyName = 'NZQueueReader'
+    policyDescription = 'Process compliance change queue' 
+    sqsArn = "arn:aws:sqs:ap-southeast-2:746869318262:ComplianceChangeQueue"
+    policyMap = ui.permissionsPolicySQS(sqsArn)
+    ctx = Context()
+    arn1 = ui.declareCustomerPolicyArn(ctx, policyName, policyDescription, policyMap)
+    arn2 = ui.declareCustomerPolicyArn(ctx, policyName, policyDescription, policyMap)
+    sqsArn1 = "arn:aws:sqs:ap-southeast-2:746869318262:ComplianceChangeQueue1"
+    policyMap1 = ui.permissionsPolicySQS(sqsArn1)
+    arn3 = ui.declareCustomerPolicyArn(ctx, policyName, policyDescription, policyMap1)
+    arn4 = ui.declareCustomerPolicyArn(ctx, policyName, policyDescription, policyMap1)
+    sqsArn2 = "arn:aws:sqs:ap-southeast-2:746869318262:ComplianceChangeQueue2"
+    policyMap2 = ui.permissionsPolicySQS(sqsArn2)
+    arn5 = ui.declareCustomerPolicyArn(ctx, policyName, policyDescription, policyMap2)
+    ui.deleteCustomerPolicy(ctx, arn5)
+
+test_lambda_policy()
+test_policy_declare()
+
+
 
 
 

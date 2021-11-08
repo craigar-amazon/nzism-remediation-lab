@@ -34,8 +34,8 @@ def policy_statement_default(ctx, queueName):
 
 def policy_map(statements):
     return {
-    'Version': "2012-10-17",
-    'Statement': statements
+        'Version': "2012-10-17",
+        'Statement': statements
     }
 
 def policyStatementEventbridge(ctx, queueName, ruleArn):
@@ -58,7 +58,7 @@ def policyStatementEventbridge(ctx, queueName, ruleArn):
 
 def get_queue_url(ctx, queueName):
     try:
-        client = ctx.session.client('sqs')
+        client = ctx.client('sqs')
         response = client.get_queue_url(
             QueueName=queueName
         )
@@ -70,7 +70,7 @@ def get_queue_url(ctx, queueName):
 
 def delete_queue(ctx, queueUrl):
     try:
-        client = ctx.session.client('sqs')
+        client = ctx.client('sqs')
         client.delete_queue(
             QueueUrl=queueUrl
         )
@@ -83,7 +83,7 @@ def delete_queue(ctx, queueUrl):
 
 def get_queue_attributes(ctx, queueUrl, anames):
     try:
-        client = ctx.session.client('sqs')
+        client = ctx.client('sqs')
         response = client.get_queue_attributes(
             QueueUrl=queueUrl,
             AttributeNames=anames
@@ -95,7 +95,7 @@ def get_queue_attributes(ctx, queueUrl, anames):
 
 def set_queue_attributes(ctx, queueUrl, deltaMap):
     try:
-        client = ctx.session.client('sqs')
+        client = ctx.client('sqs')
         client.set_queue_attributes(
             QueueUrl=queueUrl,
             Attributes=deltaMap
@@ -106,7 +106,7 @@ def set_queue_attributes(ctx, queueUrl, deltaMap):
 
 def create_queue(ctx, queueName, reqd):
     try:
-        client = ctx.session.client('sqs')
+        client = ctx.client('sqs')
         client.create_queue(
             QueueName=queueName,
             Attributes=reqd

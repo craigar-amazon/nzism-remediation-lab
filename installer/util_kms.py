@@ -63,7 +63,7 @@ def canon_alias(aliasName):
 
 def create_key_arn(ctx, description, policyJson):
     try:
-        client = ctx.session.client('kms')
+        client = ctx.client('kms')
         response = client.create_key(
             KeySpec="SYMMETRIC_DEFAULT",
             Description=description,
@@ -77,7 +77,7 @@ def create_key_arn(ctx, description, policyJson):
 
 def create_alias(ctx, aliasName, cmkArn):
     try:
-        client = ctx.session.client('kms')
+        client = ctx.client('kms')
         client.create_alias(
             AliasName=aliasName,
             TargetKeyId=cmkArn
@@ -88,7 +88,7 @@ def create_alias(ctx, aliasName, cmkArn):
 
 def put_key_policy(ctx, cmkArn, policyJson):
     try:
-        client = ctx.session.client('kms')
+        client = ctx.client('kms')
         client.put_key_policy(
             KeyId=cmkArn,
             PolicyName='default',
@@ -100,7 +100,7 @@ def put_key_policy(ctx, cmkArn, policyJson):
 
 def get_key_rotation_status(ctx, cmkArn):
     try:
-        client = ctx.session.client('kms')
+        client = ctx.client('kms')
         response = client.get_key_rotation_status(
             KeyId=cmkArn
         )
@@ -111,7 +111,7 @@ def get_key_rotation_status(ctx, cmkArn):
 
 def get_key_policy(ctx, cmkArn):
     try:
-        client = ctx.session.client('kms')
+        client = ctx.client('kms')
         response = client.get_key_policy(
             KeyId=cmkArn,
             PolicyName='default'
@@ -124,7 +124,7 @@ def get_key_policy(ctx, cmkArn):
 
 def update_key_description(ctx, cmkArn, description):
     try:
-        client = ctx.session.client('kms')
+        client = ctx.client('kms')
         client.update_key_description(
             KeyId=cmkArn,
             Description=description
@@ -135,7 +135,7 @@ def update_key_description(ctx, cmkArn, description):
 
 def enable_key_rotation(ctx, cmkArn):
     try:
-        client = ctx.session.client('kms')
+        client = ctx.client('kms')
         client.enable_key_rotation(
             KeyId=cmkArn
         )
@@ -145,7 +145,7 @@ def enable_key_rotation(ctx, cmkArn):
 
 def schedule_key_deletion(ctx, cmkArn, pendingWindowInDays):
     try:
-        client = ctx.session.client('kms')
+        client = ctx.client('kms')
         client.schedule_key_deletion(
             KeyId=cmkArn,
             PendingWindowInDays=pendingWindowInDays
@@ -157,7 +157,7 @@ def schedule_key_deletion(ctx, cmkArn, pendingWindowInDays):
 
 def delete_alias(ctx, canonAlias):
     try:
-        client = ctx.session.client('kms')
+        client = ctx.client('kms')
         client.delete_alias(
             AliasName=canonAlias
         )
@@ -168,7 +168,7 @@ def delete_alias(ctx, canonAlias):
 
 def getCMKMeta(ctx, keyId):
     try:
-        client = ctx.session.client('kms')
+        client = ctx.client('kms')
         response = client.describe_key(
             KeyId=keyId
         )

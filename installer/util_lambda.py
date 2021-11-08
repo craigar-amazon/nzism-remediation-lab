@@ -15,7 +15,7 @@ def _fail(e, op, functionName):
 # Allow lambda:GetFunction
 def getLambdaFunction(ctx, functionName):
     try:
-        client = ctx.session.client('lambda')
+        client = ctx.client('lambda')
         response = client.get_function(
             FunctionName=functionName
         )
@@ -29,7 +29,7 @@ def getLambdaFunction(ctx, functionName):
 def createLambdaFunction(ctx, functionName, roleArn, cfg, codePath):
     zipBytes = getZipCodeBytes(codePath, functionName)
     try:
-        client = ctx.session.client('lambda')
+        client = ctx.client('lambda')
         response = client.create_function(
             FunctionName=functionName,
             Runtime=cfg['Runtime'],
@@ -50,7 +50,7 @@ def createLambdaFunction(ctx, functionName, roleArn, cfg, codePath):
 # Allow lambda:UpdateFunctionConfiguration
 def updateLambdaFunctionConfiguration(ctx, functionName, roleArn, cfg):
     try:
-        client = ctx.session.client('lambda')
+        client = ctx.client('lambda')
         response = client.update_function_configuration(
             FunctionName=functionName,
             Runtime=cfg['Runtime'],
@@ -69,7 +69,7 @@ def updateLambdaFunctionConfiguration(ctx, functionName, roleArn, cfg):
 def updateLambdaFunctionCode(ctx, functionName, codePath):
     zipBytes = getZipCodeBytes(codePath, functionName)
     try:
-        client = ctx.session.client('lambda')
+        client = ctx.client('lambda')
         response = client.update_function_code(
             FunctionName=functionName,
             ZipFile=zipBytes
@@ -81,7 +81,7 @@ def updateLambdaFunctionCode(ctx, functionName, codePath):
 
 def getLambdaPolicy(ctx, functionArn):
     try:
-        client = ctx.session.client('lambda')
+        client = ctx.client('lambda')
         response = client.get_policy(
             FunctionName=functionArn
         )
@@ -93,7 +93,7 @@ def getLambdaPolicy(ctx, functionArn):
 
 def removeLambdaPolicy(ctx, functionArn, sid):
     try:
-        client = ctx.session.client('lambda')
+        client = ctx.client('lambda')
         client.remove_permission(
             FunctionName=functionArn,
             StatementId = sid
@@ -106,7 +106,7 @@ def removeLambdaPolicy(ctx, functionArn, sid):
 
 def addLambdaPolicyForEventRule(ctx, functionArn, sid, ruleArn):
     try:
-        client = ctx.session.client('lambda')
+        client = ctx.client('lambda')
         client.add_permission(
             FunctionName=functionArn,
             StatementId = sid,
@@ -128,7 +128,7 @@ def declareLambdaPolicyForEventRule(ctx, functionArn, ruleArn):
 # Allow lambda:DeleteFunction
 def deleteLambdaFunction(ctx, functionName):
     try:
-        client = ctx.session.client('lambda')
+        client = ctx.client('lambda')
         client.delete_function(
             FunctionName=functionName
         )
@@ -148,7 +148,7 @@ def declareLambdaFunctionArn(ctx, functionName, roleArn, cfg, codePath):
 
 def invokeLambdaFunction(ctx, functionName, payloadMap):
     try:
-        client = ctx.session.client('lambda')
+        client = ctx.client('lambda')
         response = client.invoke(
             FunctionName=functionName,
             InvocationType='RequestResponse',
