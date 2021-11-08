@@ -223,7 +223,6 @@ def test_role_declare():
     roleName = 'ComplianceChangeConsumerLambdaRole'
     roleDescription = 'Compliance change queue lambda consumer role'
     ctx = Context()
-    # lambaPolicyArn = ui.declareAwsPolicyArn(ctx, lambdaPolicyName)
     lambdaTrustPolicy = ui.trustPolicyLambda()
     trustPolicy2 = ui.trustPolicyService("events.amazonaws.com")
     roleDescription2 = 'Compliance change SQS queue Lambda consumer role'
@@ -232,9 +231,32 @@ def test_role_declare():
     roleArn3 = ui.declareRoleArn(ctx, roleName, roleDescription2, trustPolicy2)
     ui.deleteRole(ctx, roleName)
 
+def test_role_build():
+    lambdaPolicyName = 'AWSLambdaBasicExecutionRole'
+    roleName = 'ComplianceChangeConsumerLambdaRole'
+    roleDescription = 'Compliance change queue lambda consumer role'
+    ctx = Context()
+    lambdaPolicyArn = ui.declareAwsPolicyArn(ctx, lambdaPolicyName)
+    lambdaPolicyArn1 = ui.declareAwsPolicyArn(ctx, 'AWSLambdaSQSQueueExecutionRole')
+    lambdaTrustPolicy = ui.trustPolicyLambda()
+    roleArn1 = ui.declareRoleArn(ctx, roleName, roleDescription, lambdaTrustPolicy)
+    ui.declareManagedPoliciesForRole(ctx, roleName, [lambdaPolicyArn])
+    ui.declareManagedPoliciesForRole(ctx, roleName, [lambdaPolicyArn, lambdaPolicyArn1])
+    ui.declareManagedPoliciesForRole(ctx, roleName, [lambdaPolicyArn1])
+
+    sqsArn1 = "arn:aws:sqs:ap-southeast-2:746869318262:ComplianceChangeQueue1"
+    sqsArn2 = "arn:aws:sqs:ap-southeast-2:746869318262:ComplianceChangeQueue2"
+    policyMapSQS1 = ui.permissionsPolicySQS(sqsArn1)
+    policyMapSQS2 = ui.permissionsPolicySQS(sqsArn2)
+    ui.declareInlinePoliciesForRole(ctx, roleName, {'QueueA': policyMapSQS1})
+    ui.declareInlinePoliciesForRole(ctx, roleName, {'QueueA': policyMapSQS1})
+    ui.declareInlinePoliciesForRole(ctx, roleName, {'QueueA': policyMapSQS2, 'QueueB': policyMapSQS1})
+    ui.declareInlinePoliciesForRole(ctx, roleName, {'QueueB': policyMapSQS2})
+
+    ui.deleteRole(ctx, roleName)
 
 
-test_role_declare()
+test_role_build()
 
 
 

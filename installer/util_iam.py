@@ -15,6 +15,9 @@ def _fail(e, op, entityName, *args):
     print(e)
     return "Unexpected error calling {} on {}".format(op, entityName)
 
+def _pair(k, v):
+    return '{}: {}'.format(k, v)
+
 def _canon_path(path):
     if len(path) == 0: return '/'
     cpath = path
@@ -64,7 +67,7 @@ def load_policy_version_json(ctx, policyArn, versionId):
         doc = response['PolicyVersion']['Document']
         return json.dumps(doc)
     except botocore.exceptions.ClientError as e:
-        erm = _fail(e, 'get_policy_version', policyArn, '{}: {}'.format('versionId', versionId))
+        erm = _fail(e, 'get_policy_version', policyArn, _pair('versionId', versionId))
         raise Exception(erm)
 
 def list_policy_versions(ctx, policyArn):
@@ -117,7 +120,7 @@ def delete_policy_version(ctx, policyArn, versionId):
         return True
     except botocore.exceptions.ClientError as e:
         if _is_resource_not_found(e): return False
-        erm = _fail(e, 'delete_policy_version', policyArn, '{}: {}'.format('versionId', versionId))
+        erm = _fail(e, 'delete_policy_version', policyArn, _pair('versionId', versionId))
         raise Exception(erm)
 
 def delete_policy_versions(ctx, policyArn):
@@ -148,7 +151,7 @@ def create_policy_arn(ctx, policyPath, policyName, policyDescription, policyJson
         )
         return response['Policy']['Arn']
     except botocore.exceptions.ClientError as e:
-        erm = _fail(e, 'create_policy', policyName, '{}: {}'.format('path', policyPath))
+        erm = _fail(e, 'create_policy', policyName, _pair('path', policyPath))
         raise Exception(erm)
 
 def create_policy_version_id(ctx, policyArn, policyJson):
@@ -162,6 +165,101 @@ def create_policy_version_id(ctx, policyArn, policyJson):
         return response['PolicyVersion']['VersionId']
     except botocore.exceptions.ClientError as e:
         erm = _fail(e, 'create_policy_version', policyArn)
+        raise Exception(erm)
+
+def load_attached_role_policy_arnset(ctx, roleName):
+    try:
+        client = ctx.client('iam')
+        response = client.list_attached_role_policies(
+            RoleName=roleName
+        )
+        if response['IsTruncated']:
+            erm = 'Attached policy list is truncated for role {}'.format(roleName)
+            raise Exception(erm)
+        policyAttachments = response['AttachedPolicies']
+        arnset = set()
+        for policyAttach in policyAttachments:
+            arnset.add(policyAttach['PolicyArn'])
+        return arnset
+    except botocore.exceptions.ClientError as e:
+        erm = _fail(e, 'list_attached_role_policies', roleName)
+        raise Exception(erm)
+
+def load_inline_role_policy_nameset(ctx, roleName):
+    try:
+        client = ctx.client('iam')
+        response = client.list_role_policies(
+            RoleName=roleName
+        )
+        if response['IsTruncated']:
+            erm = 'Inline policy list is truncated for role {}'.format(roleName)
+            raise Exception(erm)
+        policyNames = response['PolicyNames']
+        nameset = set()
+        for policyName in policyNames:
+            nameset.add(policyName)
+        return nameset
+    except botocore.exceptions.ClientError as e:
+        erm = _fail(e, 'list_role_policies', roleName)
+        raise Exception(erm)
+
+
+def attach_role_managed_policy(ctx, roleName, policyArn):
+    try:
+        client = ctx.client('iam')
+        client.attach_role_policy(
+            RoleName=roleName,
+            PolicyArn=policyArn
+        )
+    except botocore.exceptions.ClientError as e:
+        erm = _fail(e, 'attach_role_policy', roleName, _pair('policy', policyArn))
+        raise Exception(erm)
+
+def detach_role_managed_policy(ctx, roleName, policyArn):
+    try:
+        client = ctx.client('iam')
+        client.detach_role_policy(
+            RoleName=roleName,
+            PolicyArn=policyArn
+        )
+    except botocore.exceptions.ClientError as e:
+        erm = _fail(e, 'detach_role_policy', roleName, _pair('policy', policyArn))
+        raise Exception(erm)
+
+def get_role_inline_policy_json(ctx, roleName, policyName):
+    try:
+        client = ctx.client('iam')
+        response = client.get_role_policy(
+            RoleName=roleName,
+            PolicyName=policyName
+        )
+        src = response['PolicyDocument']
+        return json.dumps(src)
+    except botocore.exceptions.ClientError as e:
+        erm = _fail(e, 'get_role_policy', roleName, _pair('policyName', policyName))
+        raise Exception(erm)
+
+def put_role_inline_policy(ctx, roleName, policyName, policyJson):
+    try:
+        client = ctx.client('iam')
+        client.put_role_policy(
+            RoleName=roleName,
+            PolicyName=policyName,
+            PolicyDocument=policyJson
+        )
+    except botocore.exceptions.ClientError as e:
+        erm = _fail(e, 'put_role_policy', roleName, _pair('policyName', policyName))
+        raise Exception(erm)
+
+def delete_role_inline_policy(ctx, roleName, policyName):
+    try:
+        client = ctx.client('iam')
+        client.delete_role_policy(
+            RoleName=roleName,
+            PolicyName=policyName
+        )
+    except botocore.exceptions.ClientError as e:
+        erm = _fail(e, 'delete_role_policy', roleName, _pair('policy', policyName))
         raise Exception(erm)
 
 
@@ -248,9 +346,6 @@ def deleteCustomerPolicy(ctx, policyArn):
     delete_policy(ctx, policyArn)
 
 
-def attach_role_policy(ctx, roleName, policyArn):
-    return
-
 def getRole(ctx, roleName):
     return get_role(ctx, roleName)
 
@@ -274,8 +369,36 @@ def declareRoleArn(ctx, roleName, roleDescription, trustPolicyMap, rolePath='/',
 
     return exArn
 
+def declareManagedPoliciesForRole(ctx, roleName, policyArns):
+    reqdArnSet = set(policyArns)
+    exArnSet = load_attached_role_policy_arnset(ctx, roleName)
+    for reqdArn in reqdArnSet:
+        if not (reqdArn in exArnSet):
+            attach_role_managed_policy(ctx, roleName, reqdArn)
+    for exArn in exArnSet:
+        if not (exArn in reqdArnSet):
+            detach_role_managed_policy(ctx, roleName, exArn)
+
+
+def declareInlinePoliciesForRole(ctx, roleName, inlinePolicyMap):
+    exNameSet = load_inline_role_policy_nameset(ctx, roleName)
+    for reqdName in inlinePolicyMap:
+        reqdMap = inlinePolicyMap[reqdName]
+        reqdJson = json.dumps(reqdMap)
+        if reqdName in exNameSet:
+            exJson = get_role_inline_policy_json(ctx, roleName, reqdName)
+            if exJson != reqdJson:
+                put_role_inline_policy(ctx, roleName, reqdName, reqdJson)
+        else:
+            put_role_inline_policy(ctx, roleName, reqdName, reqdJson)
+    for exName in exNameSet:
+        if not (exName in inlinePolicyMap):
+            delete_role_inline_policy(ctx, roleName, exName)
+
 
 def deleteRole(ctx, roleName):
+    declareManagedPoliciesForRole(ctx, roleName, [])
+    declareInlinePoliciesForRole(ctx, roleName, {})
     delete_role(ctx, roleName)
 
 
