@@ -218,10 +218,23 @@ def test_policy_declare():
     arn5 = ui.declareCustomerPolicyArn(ctx, policyName, policyDescription, policyMap2)
     ui.deleteCustomerPolicy(ctx, arn5)
 
-test_lambda_policy()
-test_policy_declare()
+def test_role_declare():
+    lambdaPolicyName = 'AWSLambdaBasicExecutionRole'
+    roleName = 'ComplianceChangeConsumerLambdaRole'
+    roleDescription = 'Compliance change queue lambda consumer role'
+    ctx = Context()
+    # lambaPolicyArn = ui.declareAwsPolicyArn(ctx, lambdaPolicyName)
+    lambdaTrustPolicy = ui.trustPolicyLambda()
+    trustPolicy2 = ui.trustPolicyService("events.amazonaws.com")
+    roleDescription2 = 'Compliance change SQS queue Lambda consumer role'
+    roleArn1 = ui.declareRoleArn(ctx, roleName, roleDescription, lambdaTrustPolicy)
+    roleArn2 = ui.declareRoleArn(ctx, roleName, roleDescription, lambdaTrustPolicy)
+    roleArn3 = ui.declareRoleArn(ctx, roleName, roleDescription2, trustPolicy2)
+    ui.deleteRole(ctx, roleName)
 
 
+
+test_role_declare()
 
 
 

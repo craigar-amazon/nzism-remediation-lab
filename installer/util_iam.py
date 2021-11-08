@@ -36,8 +36,7 @@ def get_role(ctx, roleName):
         response = client.get_role(
             RoleName=roleName
         )
-        r = response['Role']
-        return r
+        return response['Role']
     except botocore.exceptions.ClientError as e:
         if _is_resource_not_found(e): return None
         erm = _fail(e, 'get_role', roleName)
@@ -166,20 +165,56 @@ def create_policy_version_id(ctx, policyArn, policyJson):
         raise Exception(erm)
 
 
-def create_role_arn(ctx, roleName, roleDescription, trustPolicyJson):
+def create_role_arn(ctx, roleName, roleDescription, trustPolicyJson, rolePath, maxSessionSecs):
     try:
         client = ctx.client('iam')
         response = client.create_role(
-            Path='/',
+            Path=rolePath,
             RoleName=roleName,
             AssumeRolePolicyDocument=trustPolicyJson,
             Description=roleDescription,
-            MaxSessionDuration=3600
+            MaxSessionDuration=maxSessionSecs
         )
         return response['Role']['Arn']
     except botocore.exceptions.ClientError as e:
         erm = _fail(e, 'create_role', roleName)
         raise Exception(erm)
+
+def update_role(ctx, roleName, roleDescription, maxSessionSecs):
+    try:
+        client = ctx.client('iam')
+        client.update_role(
+            RoleName=roleName,
+            Description=roleDescription,
+            MaxSessionDuration=maxSessionSecs
+        )
+    except botocore.exceptions.ClientError as e:
+        erm = _fail(e, 'update_role', roleName)
+        raise Exception(erm)
+
+def update_assume_role_policy(ctx, roleName, trustPolicyJson):
+    try:
+        client = ctx.client('iam')
+        client.update_assume_role_policy(
+            RoleName=roleName,
+            PolicyDocument=trustPolicyJson
+        )
+    except botocore.exceptions.ClientError as e:
+        erm = _fail(e, 'update_assume_role_policy', roleName)
+        raise Exception(erm)
+
+def delete_role(ctx, roleName):
+    try:
+        client = ctx.client('iam')
+        client.delete_role(
+            RoleName=roleName
+        )
+        return True
+    except botocore.exceptions.ClientError as e:
+        if _is_resource_not_found(e): return False
+        erm = _fail(e, 'delete_role', roleName)
+        raise Exception(erm)
+
 
 def declareAwsPolicyArn(ctx, policyName, policyPath='/service-role/'):
     policyArn = _policy_arn_aws(policyPath, policyName)
@@ -219,15 +254,43 @@ def attach_role_policy(ctx, roleName, policyArn):
 def getRole(ctx, roleName):
     return get_role(ctx, roleName)
 
+def declareRoleArn(ctx, roleName, roleDescription, trustPolicyMap, rolePath='/', maxSessionSecs=3600):
+    reqdTrustPolicyJson = json.dumps(trustPolicyMap)
+    exRole = get_role(ctx, roleName)
+    if not exRole:
+        rolePathCanon = _canon_path(rolePath)
+        newArn = create_role_arn(ctx, roleName, roleDescription, reqdTrustPolicyJson, rolePathCanon, maxSessionSecs)
+        return newArn
+
+    exArn = exRole['Arn']
+    exDescription = exRole['Description']
+    exMaxSession = exRole['MaxSessionDuration']
+    if (exDescription != roleDescription) or (exMaxSession != maxSessionSecs):
+        update_role(ctx, roleName, roleDescription, maxSessionSecs)
+
+    exTrustPolicyJson = json.dumps(exRole['AssumeRolePolicyDocument'])
+    if exTrustPolicyJson != reqdTrustPolicyJson:
+        update_assume_role_policy(ctx, roleName, reqdTrustPolicyJson)
+
+    return exArn
+
+
+def deleteRole(ctx, roleName):
+    delete_role(ctx, roleName)
+
 
 def trustPolicyLambda():
+    return trustPolicyService("lambda.amazonaws.com")
+
+
+def trustPolicyService(serviceName):
     return {
         'Version': "2012-10-17",
         'Statement': [
             {
                 'Effect': "Allow",
                 'Principal': {
-                    'Service': "lambda.amazonaws.com"
+                    'Service': serviceName
                 },
                 "Action": "sts:AssumeRole"
             }
@@ -251,7 +314,4 @@ def permissionsPolicySQS(queueArn):
         'Resource': queueArn
     }
     return permissionsPolicy([statement])
-
-def policyArnAwsLambdaBasicExecution():
-    return _policy_arn('/service-role/', 'AWSLambdaBasicExecutionRole')
 
