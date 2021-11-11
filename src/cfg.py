@@ -10,5 +10,6 @@ def codeConfig():
     return {
         'CodeHome': './src',
         'LambdaFolder': 'lambda',
+        'RulesFolder': 'rules',
         'LibFolder': 'lib'
     }

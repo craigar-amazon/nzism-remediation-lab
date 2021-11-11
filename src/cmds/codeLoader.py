@@ -6,7 +6,6 @@ from zipfile import ZIP_STORED
 from lib.rdq import Profile
 from lib.rdq.iam import IamClient
 
-from cfg import lambdaConfig
 from cfg import codeConfig
 
 def requiredProp(cfg, key):
@@ -37,7 +36,6 @@ def bytes_file(file_path):
 
 def get_zip_code_bytes(functionName, mainBase, mainPath, libBase, libPaths):
     zipFilePath = os.path.join(tempfile.gettempdir(), functionName+".zip")
-    print(zipFilePath)
     aggregateFilePairs = []
     main_pairs = get_all_file_pairs(mainBase, mainPath)
     if len(main_pairs) == 0:
@@ -50,11 +48,16 @@ def get_zip_code_bytes(functionName, mainBase, mainPath, libBase, libPaths):
     make_zip_file(zipFilePath, aggregateFilePairs)
     return bytes_file(zipFilePath)
 
-def get_lambda_code_bytes(baseFunctionName, codeCfg, libs):
+def get_lambda_code_bytes(baseFunctionName, libs, isRule):
+    codeCfg = codeConfig()
     codeHome = requiredProp(codeCfg, 'CodeHome')
     lambdaFolder = requiredProp(codeCfg, 'LambdaFolder')
+    if isRule:
+        typeFolder = requiredProp(codeCfg, 'RulesFolder')
+    else:
+        typeFolder = 'core'
     libFolder = requiredProp(codeCfg, 'LibFolder')
-    mainCodePath = os.path.join(codeHome, lambdaFolder, baseFunctionName)
+    mainCodePath = os.path.join(codeHome, lambdaFolder, typeFolder, baseFunctionName)
     mainCodeBase = mainCodePath
     libBase = codeHome
     libPaths = []
@@ -64,22 +67,12 @@ def get_lambda_code_bytes(baseFunctionName, codeCfg, libs):
     return get_zip_code_bytes(baseFunctionName, mainCodeBase, mainCodePath, libBase, libPaths)
 
 
-def lambdaLoadAll(args):
-    codeCfg = codeConfig()
-    lambdaCfg = lambdaConfig()
-    lambda_load_dispatcher(args.cpackPrefix, codeCfg, lambdaCfg)
-    # profile = Profile()
-    # iam = IamClient(profile)
-    # role = iam.getRole('aws-controltower-AuditAdministratorRole')
-    # print(role)
-
-def lambda_load_dispatcher(cpackPrefix, codeCfg, lambdaCfg):
-    baseFunctionName = 'ComplianceDispatcher'
-    description = 'Forwards compliance change events to specific Lambdas'
+def getCoreCode(baseFunctionName):
     libs = ['rdq']
-    targetFunctionName = "{}{}".format(cpackPrefix, baseFunctionName)
-    codeBytes = get_lambda_code_bytes(baseFunctionName, codeCfg, libs)
-    byteCount = len(codeBytes)
-    print("Bytes={}".format(byteCount))
+    return get_lambda_code_bytes(baseFunctionName, libs, False)
+
+def getRuleCode(baseFunctionName):
+    libs = ['rdq']
+    return get_lambda_code_bytes(baseFunctionName, libs, True)
 
 

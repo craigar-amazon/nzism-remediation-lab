@@ -1,4 +1,4 @@
-from .loader import lambdaLoadAll
+from .codeLoader import getCoreCode
 
 def handler(args):
-    lambdaLoadAll(args)
+    getCoreCode("ComplianceDispatcher")
