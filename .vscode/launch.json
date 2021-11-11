@@ -4,13 +4,31 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
-
-
         {
             "name": "Python: Current File",
             "type": "python",
             "request": "launch",
             "program": "${file}",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Installer verify",
+            "type": "python",
+            "request": "launch",
+            "program": "src/installer.py",
+            "args": [
+                "verify"
+            ],
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Installer init",
+            "type": "python",
+            "request": "launch",
+            "program": "src/installer.py",
+            "args": [
+                "init", "--cpack-prefix", "NZ1"
+            ],
             "console": "integratedTerminal"
         },
         {
