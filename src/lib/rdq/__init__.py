@@ -31,5 +31,11 @@ class Profile:
         return self._regionName
 
 
-    def getClient(self, service_name):
-        return self._session.client(service_name)
+    def getClient(self, serviceName):
+        return self._session.client(serviceName)
+
+    def getRegionAccountArn(self, serviceName, resourceName):
+        return "arn:aws:{}:{}:{}:{}".format(serviceName, self._regionName, self._accountId, resourceName)
+
+    def getGlobalAccountArn(self, serviceName, resourceName):
+        return "arn:aws:{}::{}:{}".format(serviceName, self._accountId, resourceName)

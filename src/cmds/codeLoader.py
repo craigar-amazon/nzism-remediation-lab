@@ -3,8 +3,6 @@ import os
 
 from zipfile import ZipFile
 from zipfile import ZIP_STORED
-from lib.rdq import Profile
-from lib.rdq.iam import IamClient
 
 from cfg import codeConfig
 
