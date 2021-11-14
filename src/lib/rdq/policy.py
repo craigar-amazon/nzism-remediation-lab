@@ -2,20 +2,26 @@ def awsLambdaBasicExecution():
     return "AWSLambdaBasicExecutionRole"
 
 def trustLambda():
-    return trustService("lambda.amazonaws.com")
+    return trustService(principalLambda())
 
 def trustEventBridge():
-    return trustService("events.amazonaws.com")
+    return trustService(principalEventBridge())
+
+def principalLambda():
+    return "lambda.amazonaws.com"
+
+def principalEventBridge():
+    return "events.amazonaws.com"
 
 
-def trustService(serviceName):
+def trustService(servicePrincipalName):
     return {
         'Version': "2012-10-17",
         'Statement': [
             {
                 'Effect': "Allow",
                 'Principal': {
-                    'Service': serviceName
+                    'Service': servicePrincipalName
                 },
                 "Action": "sts:AssumeRole"
             }

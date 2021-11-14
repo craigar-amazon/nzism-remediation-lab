@@ -1,11 +1,13 @@
 from lib.rdq import Profile
-from lib.rdq.iam import IamClient
+from lib.rdq.svciam import IamClient
+from lib.rdq.svclambda import LambdaClient
 import lib.rdq.policy as policy
+from cmds.codeLoader import getTestCode
 
 def test_lambda_policy():
     iam = IamClient(Profile())
-    lambaPolicyArn = iam.declareAwsPolicyArn(policy.awsLambdaBasicExecution())
-    assert lambaPolicyArn == 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
+    lambdaPolicyArn = iam.declareAwsPolicyArn(policy.awsLambdaBasicExecution())
+    assert lambdaPolicyArn == 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
 
 
 def test_policy_declare():
@@ -78,8 +80,34 @@ def test_role_build():
     iam.deleteRole(roleName)
     assert not iam.getRole(roleName)
 
+def test_lambda():
+    codeZip = getTestCode('Echo')
+    profile = Profile()
+    iamc = IamClient(profile)
+    lambdac = LambdaClient(profile)
+    lambdaPolicyArn = iamc.declareAwsPolicyArn(policy.awsLambdaBasicExecution())
+    lambdaTrustPolicy = policy.trustLambda()
+    roleDescription = 'UnitTest1 Lambda Role'
+    roleName = 'UnitTest1LambdaRole'
+    functionName = "UnitTest1Lambda"
+    functionDescription = "UnitTest1 Lambda" 
+    functionCfg = {
+        'Runtime': 'python3.8',
+        'Handler': 'lambda_function.lambda_handler',
+        'Timeout': 180,
+        'MemorySize': 128
+    }
+    lambdac.deleteFunction(functionName)
+    iamc.deleteRole(roleName)
+    roleArn = iamc.declareRoleArn(roleName, roleDescription, lambdaTrustPolicy)
+    iamc.declareManagedPoliciesForRole(roleName, [lambdaPolicyArn])
+    lambdaArn = lambdac.declareFunctionArn(functionName, functionDescription, (roleArn + 'X'), functionCfg, codeZip)
+    print(lambdaArn)
+    lambdac.deleteFunction(functionName)
+    iamc.deleteRole(roleName)
 
-test_lambda_policy()
-test_policy_declare()
-test_role_declare()
-test_role_build()
+# test_lambda_policy()
+# test_policy_declare()
+# test_role_declare()
+# test_role_build()
+test_lambda()

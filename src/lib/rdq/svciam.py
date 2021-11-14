@@ -1,8 +1,6 @@
 import botocore
 
-from .base import _is_resource_not_found
-from .base import _fail
-from .base import _to_json
+from .base import ServiceUtils
 
 def _canon_path(path):
     if len(path) == 0: return '/'
@@ -20,14 +18,13 @@ class IamClient:
     def __init__(self, profile):
         service = 'iam'
         self._profile = profile
-        self._service = service
         self._client = profile.getClient(service)
+        self._utils = ServiceUtils(service)
 
     def _policy_arn_customer(self, path, policyName):
         return 'arn:aws:iam::{}:policy{}{}'.format(self._profile.accountId, _canon_path(path), policyName)
 
     def get_role(self, roleName):
-        svc = self._service
         op = 'get_role'
         try:
             response = self._client.get_role(
@@ -35,12 +32,10 @@ class IamClient:
             )
             return response['Role']
         except botocore.exceptions.ClientError as e:
-            if _is_resource_not_found(e): return None
-            erm = _fail(e, svc, op, 'RoleName', roleName)
-            raise Exception(erm)
+            if self._utils.is_resource_not_found(e): return None
+            raise Exception(self._utils.fail(e, op, 'RoleName', roleName))
 
     def get_policy(self, policyArn):
-        svc = self._service
         op = 'get_policy'
         try:
             response = self._client.get_policy(
@@ -48,12 +43,10 @@ class IamClient:
             )
             return response['Policy']
         except botocore.exceptions.ClientError as e:
-            if _is_resource_not_found(e): return None
-            erm = _fail(e, svc, op, 'PolicyArn', policyArn)
-            raise Exception(erm)
+            if self._utils.is_resource_not_found(e): return None
+            raise Exception(self._utils.fail(e, op, 'PolicyArn', policyArn))
 
     def load_policy_version_json(self, policyArn, versionId):
-        svc = self._service
         op = 'get_policy_version'
         try:
             response = self._client.get_policy_version(
@@ -61,13 +54,11 @@ class IamClient:
                 VersionId=versionId
             )
             doc = response['PolicyVersion']['Document']
-            return _to_json(doc)
+            return self._utils.to_json(doc)
         except botocore.exceptions.ClientError as e:
-            erm = _fail(e, svc, op, 'PolicyArn', policyArn, 'VersionId', versionId)
-            raise Exception(erm)
+            raise Exception(self._utils.fail(e, op, 'PolicyArn', policyArn, 'VersionId', versionId))
 
     def list_policy_versions(self, policyArn):
-        svc = self._service
         op = 'list_policy_versions'
         try:
             response = self._client.list_policy_versions(
@@ -92,11 +83,9 @@ class IamClient:
                 'defaultVersionId': defaultVersionId
             }
         except botocore.exceptions.ClientError as e:
-            erm = _fail(e, svc, op, 'PolicyArn', policyArn)
-            raise Exception(erm)
+            raise Exception(self._utils.fail(e, op, 'PolicyArn', policyArn))
 
     def delete_policy(self, policyArn):
-        svc = self._service
         op = 'delete_policy'
         try:
             self._client.delete_policy(
@@ -104,12 +93,10 @@ class IamClient:
             )
             return True
         except botocore.exceptions.ClientError as e:
-            if _is_resource_not_found(e): return False
-            erm = _fail(e, svc, op, 'PolicyArn', policyArn)
-            raise Exception(erm)
+            if self._utils.is_resource_not_found(e): return False
+            raise Exception(self._utils.fail(e, op, 'PolicyArn', policyArn))
 
     def delete_policy_version(self, policyArn, versionId):
-        svc = self._service
         op = 'delete_policy_version'
         try:
             self._client.delete_policy_version(
@@ -118,12 +105,10 @@ class IamClient:
             )
             return True
         except botocore.exceptions.ClientError as e:
-            if _is_resource_not_found(e): return False
-            erm = _fail(e, svc, op, 'PolicyArn', policyArn, 'VersionId', versionId)
-            raise Exception(erm)
+            if self._utils.is_resource_not_found(e): return False
+            raise Exception(self._utils.fail(e, op, 'PolicyArn', policyArn, 'VersionId', versionId))
 
     def create_policy_arn(self, policyPath, policyName, policyDescription, policyJson):
-        svc = self._service
         op = 'create_policy'
         try:
             response = self._client.create_policy(
@@ -134,11 +119,9 @@ class IamClient:
             )
             return response['Policy']['Arn']
         except botocore.exceptions.ClientError as e:
-            erm = _fail(e, svc, op, 'PolicyName', policyName, 'PolicyPath', policyPath)
-            raise Exception(erm)
+            raise Exception(self._utils.fail(e, op, 'PolicyName', policyName, 'PolicyPath', policyPath))
 
     def create_policy_version_id(self, policyArn, policyJson):
-        svc = self._service
         op = 'create_policy_version'
         try:
             response = self._client.create_policy_version(
@@ -148,11 +131,9 @@ class IamClient:
             )
             return response['PolicyVersion']['VersionId']
         except botocore.exceptions.ClientError as e:
-            erm = _fail(e, svc, op, 'PolicyArn', policyArn)
-            raise Exception(erm)
+            raise Exception(self._utils.fail(e, op, 'PolicyArn', policyArn))
 
     def load_attached_role_policy_arnset(self, roleName):
-        svc = self._service
         op = 'list_attached_role_policies'
         try:
             response = self._client.list_attached_role_policies(
@@ -167,11 +148,10 @@ class IamClient:
                 arnset.add(policyAttach['PolicyArn'])
             return arnset
         except botocore.exceptions.ClientError as e:
-            erm = _fail(e, svc, op, 'RoleName', roleName)
-            raise Exception(erm)
+            if self._utils.is_resource_not_found(e): return set()
+            raise Exception(self._utils.fail(e, op, 'RoleName', roleName))
 
     def load_inline_role_policy_nameset(self, roleName):
-        svc = self._service
         op = 'list_role_policies'
         try:
             response = self._client.list_role_policies(
@@ -186,11 +166,10 @@ class IamClient:
                 nameset.add(policyName)
             return nameset
         except botocore.exceptions.ClientError as e:
-            erm = _fail(e, svc, op, 'RoleName', roleName)
-            raise Exception(erm)
+            if self._utils.is_resource_not_found(e): return set()
+            raise Exception(self._utils.fail(e, op, 'RoleName', roleName))
 
     def attach_role_managed_policy(self, roleName, policyArn):
-        svc = self._service
         op = 'attach_role_policy'
         try:
             self._client.attach_role_policy(
@@ -198,11 +177,9 @@ class IamClient:
                 PolicyArn=policyArn
             )
         except botocore.exceptions.ClientError as e:
-            erm = _fail(e, svc, op, 'RoleName', roleName, 'PolicyArn', policyArn)
-            raise Exception(erm)
+            raise Exception(self._utils.fail(e, op, 'RoleName', roleName, 'PolicyArn', policyArn))
 
     def detach_role_managed_policy(self, roleName, policyArn):
-        svc = self._service
         op = 'detach_role_policy'
         try:
             self._client.detach_role_policy(
@@ -210,11 +187,9 @@ class IamClient:
                 PolicyArn=policyArn
             )
         except botocore.exceptions.ClientError as e:
-            erm = _fail(e, svc, op, 'RoleName', roleName, 'PolicyArn', policyArn)
-            raise Exception(erm)
+            raise Exception(self._utils.fail(e, op, 'RoleName', roleName, 'PolicyArn', policyArn))
 
     def get_role_inline_policy_json(self, roleName, policyName):
-        svc = self._service
         op = 'get_role_policy'
         try:
             response = self._client.get_role_policy(
@@ -222,13 +197,11 @@ class IamClient:
                 PolicyName=policyName
             )
             src = response['PolicyDocument']
-            return _to_json(src)
+            return self._utils.to_json(src)
         except botocore.exceptions.ClientError as e:
-            erm = _fail(e, svc, op, 'RoleName', roleName, 'PolicyName', policyName)
-            raise Exception(erm)
+            raise Exception(self._utils.fail(e, op, 'RoleName', roleName, 'PolicyName', policyName))
 
     def put_role_inline_policy(self, roleName, policyName, policyJson):
-        svc = self._service
         op = 'put_role_policy'
         try:
             self._client.put_role_policy(
@@ -237,11 +210,9 @@ class IamClient:
                 PolicyDocument=policyJson
             )
         except botocore.exceptions.ClientError as e:
-            erm = _fail(e, svc, op, 'RoleName', roleName, 'PolicyName', policyName)
-            raise Exception(erm)
+            raise Exception(self._utils.fail(e, op, 'RoleName', roleName, 'PolicyName', policyName))
 
     def delete_role_inline_policy(self, roleName, policyName):
-        svc = self._service
         op = 'put_role_policy'
         try:
             self._client.delete_role_policy(
@@ -249,11 +220,9 @@ class IamClient:
                 PolicyName=policyName
             )
         except botocore.exceptions.ClientError as e:
-            erm = _fail(e, svc, op, 'RoleName', roleName, 'PolicyName', policyName)
-            raise Exception(erm)
+            raise Exception(self._utils.fail(e, op, 'RoleName', roleName, 'PolicyName', policyName))
 
     def create_role_arn(self, roleName, roleDescription, trustPolicyJson, rolePath, maxSessionSecs):
-        svc = self._service
         op = 'create_role'
         try:
             response = self._client.create_role(
@@ -265,11 +234,9 @@ class IamClient:
             )
             return response['Role']['Arn']
         except botocore.exceptions.ClientError as e:
-            erm = _fail(e, svc, op, 'RoleName', roleName)
-            raise Exception(erm)
+            raise Exception(self._utils.fail(e, op, 'RoleName', roleName))
 
     def update_role(self, roleName, roleDescription, maxSessionSecs):
-        svc = self._service
         op = 'update_role'
         try:
             self._client.update_role(
@@ -278,11 +245,9 @@ class IamClient:
                 MaxSessionDuration=maxSessionSecs
             )
         except botocore.exceptions.ClientError as e:
-            erm = _fail(e, svc, op, 'RoleName', roleName)
-            raise Exception(erm)
+            raise Exception(self._utils.fail(e, op, 'RoleName', roleName))
 
     def update_assume_role_policy(self, roleName, trustPolicyJson):
-        svc = self._service
         op = 'update_role'
         try:
             self._client.update_assume_role_policy(
@@ -290,11 +255,9 @@ class IamClient:
                 PolicyDocument=trustPolicyJson
             )
         except botocore.exceptions.ClientError as e:
-            erm = _fail(e, svc, op, 'RoleName', roleName)
-            raise Exception(erm)
+            raise Exception(self._utils.fail(e, op, 'RoleName', roleName))
 
     def delete_role(self, roleName):
-        svc = self._service
         op = 'delete_role'
         try:
             self._client.delete_role(
@@ -302,9 +265,8 @@ class IamClient:
             )
             return True
         except botocore.exceptions.ClientError as e:
-            if _is_resource_not_found(e): return False
-            erm = _fail(e, svc, op, 'RoleName', roleName)
-            raise Exception(erm)
+            if self._utils.is_resource_not_found(e): return False
+            raise Exception(self._utils.fail(e, op, 'RoleName', roleName))
 
     def delete_policy_versions(self, policyArn):
         versionMap = self.list_policy_versions(policyArn)
@@ -341,7 +303,7 @@ class IamClient:
 
     def declareCustomerPolicyArn(self, policyName, policyDescription, policyMap, policyPath='/', keepVersionCount=3):
         policyArn = self._policy_arn_customer(policyPath, policyName)
-        reqdPolicyJson = _to_json(policyMap)
+        reqdPolicyJson = self._utils.to_json(policyMap)
         exPolicy = self.get_policy(policyArn)
         if not exPolicy:
             newArn = self.create_policy_arn(policyPath, policyName, policyDescription, reqdPolicyJson)
@@ -366,7 +328,7 @@ class IamClient:
 
 
     def declareRoleArn(self, roleName, roleDescription, trustPolicyMap, rolePath='/', maxSessionSecs=3600):
-        reqdTrustPolicyJson = _to_json(trustPolicyMap)
+        reqdTrustPolicyJson = self._utils.to_json(trustPolicyMap)
         exRole = self.get_role(roleName)
         if not exRole:
             rolePathCanon = _canon_path(rolePath)
@@ -379,7 +341,7 @@ class IamClient:
         if (exDescription != roleDescription) or (exMaxSession != maxSessionSecs):
             self.update_role(roleName, roleDescription, maxSessionSecs)
 
-        exTrustPolicyJson = _to_json(exRole['AssumeRolePolicyDocument'])
+        exTrustPolicyJson = self._utils.to_json(exRole['AssumeRolePolicyDocument'])
         if exTrustPolicyJson != reqdTrustPolicyJson:
             self.update_assume_role_policy(roleName, reqdTrustPolicyJson)
 
@@ -401,7 +363,7 @@ class IamClient:
         exNameSet = self.load_inline_role_policy_nameset(roleName)
         for reqdName in inlinePolicyMap:
             reqdMap = inlinePolicyMap[reqdName]
-            reqdJson = _to_json(reqdMap)
+            reqdJson = self._utils.to_json(reqdMap)
             putPolicy = True 
             if reqdName in exNameSet:
                 exJson = self.get_role_inline_policy_json(roleName, reqdName)

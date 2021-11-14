@@ -46,14 +46,10 @@ def get_zip_code_bytes(functionName, mainBase, mainPath, libBase, libPaths):
     make_zip_file(zipFilePath, aggregateFilePairs)
     return bytes_file(zipFilePath)
 
-def get_lambda_code_bytes(baseFunctionName, libs, isRule):
+def get_lambda_code_bytes(baseFunctionName, libs, typeFolder):
     codeCfg = codeConfig()
     codeHome = requiredProp(codeCfg, 'CodeHome')
     lambdaFolder = requiredProp(codeCfg, 'LambdaFolder')
-    if isRule:
-        typeFolder = requiredProp(codeCfg, 'RulesFolder')
-    else:
-        typeFolder = 'core'
     libFolder = requiredProp(codeCfg, 'LibFolder')
     mainCodePath = os.path.join(codeHome, lambdaFolder, typeFolder, baseFunctionName)
     mainCodeBase = mainCodePath
@@ -67,10 +63,18 @@ def get_lambda_code_bytes(baseFunctionName, libs, isRule):
 
 def getCoreCode(baseFunctionName):
     libs = ['rdq']
-    return get_lambda_code_bytes(baseFunctionName, libs, False)
+    typeFolder = 'core'
+    return get_lambda_code_bytes(baseFunctionName, libs, typeFolder)
 
 def getRuleCode(baseFunctionName):
     libs = ['rdq']
-    return get_lambda_code_bytes(baseFunctionName, libs, True)
+    codeCfg = codeConfig()
+    typeFolder = requiredProp(codeCfg, 'RulesFolder')
+    return get_lambda_code_bytes(baseFunctionName, libs, typeFolder)
+
+def getTestCode(baseFunctionName):
+    libs = ['rdq']
+    typeFolder = 'test'
+    return get_lambda_code_bytes(baseFunctionName, libs, typeFolder)
 
 
