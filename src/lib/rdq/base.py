@@ -9,7 +9,7 @@ class ServiceUtils:
     
     def is_resource_not_found(self, e):
         erc = e.response['Error']['Code']
-        return (erc == 'NoSuchEntity') or (erc == 'ResourceNotFoundException')
+        return (erc == 'NoSuchEntity') or (erc == 'ResourceNotFoundException') or (erc == 'NotFoundException')
 
     def is_role_propagation_delay(self, e):
         erc = e.response['Error']['Code']
@@ -42,6 +42,12 @@ class ServiceUtils:
         if type(src) is str:
             return json.loads(src)
         return src
+
+    def policy_map(self, statements):
+        return {
+            'Version': "2012-10-17",
+            'Statement': statements
+        }
 
     def fail(self, e, op, entityType, entityName, *args):
         print("Unexpected error calling {}:{}".format(self._service, op))

@@ -34,8 +34,9 @@ def permissions(statements):
         'Statement': statements
     }
 
-def allowConsumeSQS(queueArn):
-    statement = {
+def allowConsumeSQS(queueArn, sid='ConsumeSQS'):
+    return {
+        'Sid': sid,
         'Effect': "Allow",
         'Action': [
             "sqs:ReceiveMessage",
@@ -44,4 +45,29 @@ def allowConsumeSQS(queueArn):
         ],
         'Resource': queueArn
     }
-    return permissions([statement])
+
+def allowSQSCMKForServiceProducer(profile, producerServicePrincipal):
+    return allowCMKForServiceProducer(profile, 'sqs', producerServicePrincipal)
+
+def allowCMKForServiceProducer(profile, storageServiceName, producerServicePrincipal):
+    sid = "Producer service " + producerServicePrincipal + " for " + storageServiceName
+    conditionKey = "kms:EncryptionContext:aws:{}:arn".format(storageServiceName)
+    conditionValue = "arn:aws:{}:{}:{}:*".format(storageServiceName, profile.regionName, profile.accountId)
+    return {
+        'Sid': sid,
+        'Effect': "Allow",
+        'Principal': {
+            'Service': producerServicePrincipal
+        },
+        'Action': [
+            "kms:Decrypt",
+            "kms:GenerateDataKey"
+
+        ],
+        'Resource': '*',
+        'Condition': {
+            'ArnLike': {
+                conditionKey: conditionValue
+            }
+        }
+    }

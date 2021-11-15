@@ -1,6 +1,7 @@
 from lib.rdq import Profile
 from lib.rdq.svciam import IamClient
 from lib.rdq.svclambda import LambdaClient
+from lib.rdq.svckms import KmsClient
 import lib.rdq.policy as policy
 from cmds.codeLoader import getTestCode
 
@@ -17,19 +18,19 @@ def test_policy_declare():
     expectedPolicyArn = profile.getGlobalAccountArn('iam', "policy/{}".format(policyName))
     policyDescription = 'Process compliance change queue' 
     sqsArn = profile.getRegionAccountArn("sqs", "ComplianceChangeQueue")
-    policyMap = policy.allowConsumeSQS(sqsArn)
+    policyMap = policy.permissions([policy.allowConsumeSQS(sqsArn)])
     arn1 = iam.declareCustomerPolicyArn(policyName, policyDescription, policyMap)
     assert arn1 == expectedPolicyArn
     arn2 = iam.declareCustomerPolicyArn(policyName, policyDescription, policyMap)
     assert arn2 == expectedPolicyArn
     sqsArn1 = profile.getRegionAccountArn("sqs", "ComplianceChangeQueue1")
-    policyMap1 = policy.allowConsumeSQS(sqsArn1)
+    policyMap1 = policy.permissions([policy.allowConsumeSQS(sqsArn1)])
     arn3 = iam.declareCustomerPolicyArn(policyName, policyDescription, policyMap1)
     assert arn3 == expectedPolicyArn
     arn4 = iam.declareCustomerPolicyArn(policyName, policyDescription, policyMap1)
     assert arn4 == expectedPolicyArn
     sqsArn2 = profile.getRegionAccountArn("sqs", "ComplianceChangeQueue2")
-    policyMap2 = policy.allowConsumeSQS(sqsArn2)
+    policyMap2 = policy.permissions([policy.allowConsumeSQS(sqsArn2)])
     arn5 = iam.declareCustomerPolicyArn(policyName, policyDescription, policyMap2)
     assert arn5 == expectedPolicyArn
     iam.deleteCustomerPolicy(arn5)
@@ -71,8 +72,8 @@ def test_role_build():
     iam.declareManagedPoliciesForRole(roleName, [lambdaPolicyArn1])
     sqsArn1 = profile.getRegionAccountArn("sqs", "ComplianceChangeQueue1")
     sqsArn2 = profile.getRegionAccountArn("sqs", "ComplianceChangeQueue2")
-    policyMapSQS1 = policy.allowConsumeSQS(sqsArn1)
-    policyMapSQS2 = policy.allowConsumeSQS(sqsArn2)
+    policyMapSQS1 = policy.permissions([policy.allowConsumeSQS(sqsArn1)])
+    policyMapSQS2 = policy.permissions([policy.allowConsumeSQS(sqsArn2)])
     iam.declareInlinePoliciesForRole(roleName, {'QueueA': policyMapSQS1})
     iam.declareInlinePoliciesForRole(roleName, {'QueueA': policyMapSQS1})
     iam.declareInlinePoliciesForRole(roleName, {'QueueA': policyMapSQS2, 'QueueB': policyMapSQS1})
@@ -121,8 +122,20 @@ def test_lambda():
     lambdac.deleteFunction(functionName)
     iamc.deleteRole(roleName)
 
-test_lambda_policy()
-test_policy_declare()
-test_role_declare()
-test_role_build()
-test_lambda()
+def test_cmk():
+    sqsCmkDescription = "Encryption for SQS queued events"
+    sqsCmkAlias = "queued_events"
+    profile = Profile()
+    producerService = policy.principalEventBridge()
+    cmkStatements = [ policy.allowSQSCMKForServiceProducer(profile, producerService) ]
+    kmsc = KmsClient(profile)
+#    kmsc.deleteCMK(sqsCmkAlias)
+    cmkarn1 = kmsc.declareCMKArn(sqsCmkDescription, sqsCmkAlias, cmkStatements)
+    assert cmkarn1
+
+# test_lambda_policy()
+# test_policy_declare()
+# test_role_declare()
+# test_role_build()
+# test_lambda()
+test_cmk()
