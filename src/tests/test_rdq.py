@@ -97,17 +97,32 @@ def test_lambda():
         'Timeout': 180,
         'MemorySize': 128
     }
-    lambdac.deleteFunction(functionName)
     iamc.deleteRole(roleName)
+    lambdac.deleteFunction(functionName)
+    expectedLambdaArn = profile.getRegionAccountArn('lambda', "function:{}".format(functionName))
     roleArn = iamc.declareRoleArn(roleName, roleDescription, lambdaTrustPolicy)
     iamc.declareManagedPoliciesForRole(roleName, [lambdaPolicyArn])
-    lambdaArn = lambdac.declareFunctionArn(functionName, functionDescription, (roleArn + 'X'), functionCfg, codeZip)
-    print(lambdaArn)
+    lambdaArn = lambdac.declareFunctionArn(functionName, functionDescription, roleArn, functionCfg, codeZip)
+    assert lambdaArn == expectedLambdaArn
+    functionDescriptionDelta1 = functionDescription + " Delta1"
+    lambdaArn1 = lambdac.declareFunctionArn(functionName, functionDescriptionDelta1, roleArn, functionCfg, codeZip)
+    assert lambdaArn1 == expectedLambdaArn
+    codeZipDelta1 = getTestCode('SimpleCredentialCheck')
+    lambdaArn2 = lambdac.declareFunctionArn(functionName, functionDescriptionDelta1, roleArn, functionCfg, codeZipDelta1)
+    assert lambdaArn2 == expectedLambdaArn
+    functionIn = {
+        'source': "unit-test"
+    }
+    functionOut = lambdac.invokeFunctionJson(functionName, functionIn)
+    assert functionOut
+    assert 'StatusCode' in functionOut
+    assert functionOut['StatusCode'] == 200
+
     lambdac.deleteFunction(functionName)
     iamc.deleteRole(roleName)
 
-# test_lambda_policy()
-# test_policy_declare()
-# test_role_declare()
-# test_role_build()
+test_lambda_policy()
+test_policy_declare()
+test_role_declare()
+test_role_build()
 test_lambda()

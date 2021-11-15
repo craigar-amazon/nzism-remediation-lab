@@ -49,6 +49,7 @@ class LambdaClient:
     # Allow lambda:UpdateFunctionConfiguration
     def update_function_configuration(self, functionName, functionDescription, roleArn, cfg):
         op = 'update_function_configuration'
+        tracker = self._utils.init_tracker()
         while True:
             try:
                 response = self._client.update_function_configuration(
