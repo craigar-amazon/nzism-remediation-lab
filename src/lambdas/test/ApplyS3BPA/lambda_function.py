@@ -26,12 +26,12 @@ def handler(event):
     resourceId = target['resourceId']
     resourceType = target['resourceType']
     if resourceType == 'AWS::::Account' and configRuleName == 's3-account-level-public-access-blocks-periodic':
-        return applyS3BPA(targetProfile, resourceId)
+        return applyS3BPA(targetProfile, resourceId, True)
     return (False, "NotApplicable", {'reason': "Unsupported resource for rule"})
 
-def applyS3BPA(profile, accountId):
+def applyS3BPA(profile, accountId, requiredState):
     s3c = S3ControlClient(profile)
-    modified = s3c.declarePublicAccessBlock()
+    modified = s3c.declarePublicAccessBlock(accountId, requiredState)
     response = {
         'modified': modified
     }

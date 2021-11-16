@@ -10,7 +10,6 @@ def test_lambda_policy():
     lambdaPolicyArn = iam.declareAwsPolicyArn(policy.awsLambdaBasicExecution())
     assert lambdaPolicyArn == 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
 
-
 def test_policy_declare():
     profile = Profile()
     iam = IamClient(profile)
@@ -81,6 +80,21 @@ def test_role_build():
     iam.deleteRole(roleName)
     assert not iam.getRole(roleName)
 
+
+def setup_assume_role(callingAccountId):
+    profile = Profile()
+    iam = IamClient(profile)
+    roleName = 'UnitTest1Assume'
+    roleDescription = "Account {} can assume this role".format(callingAccountId)
+    trustPolicy = policy.trustAccount(callingAccountId)
+    iam.declareRoleArn(roleName, roleDescription, trustPolicy)
+
+def test_assume_role(targetAccountId):
+    profile = Profile()
+    roleName = 'UnitTest1Assume'
+    newProfile = profile.assumeRole(targetAccountId, roleName, profile.regionName, "TestSession")
+
+
 def test_lambda():
     codeZip = getTestCode('Echo')
     profile = Profile()
@@ -91,7 +105,7 @@ def test_lambda():
     roleDescription = 'UnitTest1 Lambda Role'
     roleName = 'UnitTest1LambdaRole'
     functionName = "UnitTest1Lambda"
-    functionDescription = "UnitTest1 Lambda" 
+    functionDescription = "UnitTest1 Lambda"
     functionCfg = {
         'Runtime': 'python3.8',
         'Handler': 'lambda_function.lambda_handler',
@@ -138,5 +152,8 @@ def test_cmk():
 # test_policy_declare()
 # test_role_declare()
 # test_role_build()
+# setup_assume_role('746869318262')
+# test_assume_role('119399605612')
+
 # test_lambda()
-test_cmk()
+# test_cmk()

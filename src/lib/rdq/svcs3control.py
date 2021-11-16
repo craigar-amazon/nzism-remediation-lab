@@ -9,9 +9,8 @@ class S3ControlClient:
         self._client = profile.getClient(service)
         self._utils = ServiceUtils(profile, service)
 
-    def get_public_access_block(self):
+    def get_public_access_block(self, accountId):
         op = 'get_public_access_block'
-        accountId = self._profile.accountId
         try:
             response = self._client.get_public_access_block(
                 AccountId=accountId
@@ -20,7 +19,7 @@ class S3ControlClient:
         except botocore.exceptions.ClientError as e:
             raise Exception(self._utils.fail(e, op, 'AccountId', accountId))
 
-    def put_public_access_block(self, cfg):
+    def put_public_access_block(self, accountId, cfg):
         op = 'put_public_access_block'
         accountId = self._profile.accountId
         try:
@@ -31,20 +30,21 @@ class S3ControlClient:
         except botocore.exceptions.ClientError as e:
             raise Exception(self._utils.fail(e, op, 'AccountId', accountId))
 
-    def declarePublicAccessBlock(self):
+    def declarePublicAccessBlock(self, targetAccountId=None, requiredState=True):
+        accountId = targetAccountId if targetAccountId else self._profile.accountId
         keys = ['BlockPublicAcls', 'IgnorePublicAcls', 'BlockPublicPolicy', 'RestrictPublicBuckets']
-        exMap = self.get_public_access_block()
+        exMap = self.get_public_access_block(accountId)
         delta = False
         for key in keys:
             if key in exMap:
                 exValue = exMap[key]
-                if not exValue:
+                if exValue != requiredState:
                     delta = True
             else:
                 delta = True
         if not delta: return False
         cfg = {}
         for key in keys:
-            cfg[key] = True
-        self.put_public_access_block(cfg)
+            cfg[key] = requiredState
+        self.put_public_access_block(accountId, cfg)
         return True

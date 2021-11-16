@@ -1,6 +1,9 @@
 import botocore
 import boto3
 
+def _role_arn(accountId, roleName):
+    return "arn:aws:iam::{}:role/{}".format(accountId, roleName)
+
 class Profile:
     def __init__(self, srcSession=None, roleName=None, sessionName=None, regionName=None):
         session = srcSession
@@ -19,9 +22,6 @@ class Profile:
             self._regionName = session.region_name
             self._roleName = roleName if roleName else session.profile_name
             self._sessionName = sessionName if sessionName else "Initial"
-            self._clientMap = {
-                'sts': sts_client
-            }
         except botocore.exceptions.ClientError as e:
             erc = e.response['Error']['Code'] 
             if erc == 'ExpiredToken':
@@ -51,8 +51,11 @@ class Profile:
     def getGlobalAccountArn(self, serviceName, resourceName):
         return "arn:aws:{}::{}:{}".format(serviceName, self._accountId, resourceName)
 
+    def getRoleArn(self, roleName):
+        return _role_arn(self._accountId, roleName)
+
     def assumeRole(self, accountId, roleName, regionName, sessionName, durationSecs=3600):
-        roleArn = "arn:aws:iam::{}:role/{}".format(accountId, roleName)
+        roleArn = _role_arn(accountId, roleName)
         try:
             sts_client = self._session.client('sts')
             response = sts_client.assume_role(

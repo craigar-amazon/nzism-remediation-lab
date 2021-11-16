@@ -29,6 +29,19 @@ def trustService(servicePrincipalName):
             }
         ]
     }
+def trustAccount(accountId):
+    return {
+        'Version': "2012-10-17",
+        'Statement': [
+            {
+                'Effect': "Allow",
+                'Principal': {
+                    'AWS': "arn:aws:iam::{}:root".format(accountId)
+                },
+                "Action": "sts:AssumeRole"
+            }
+        ]
+    }
 
 def permissions(statements):
     return {
