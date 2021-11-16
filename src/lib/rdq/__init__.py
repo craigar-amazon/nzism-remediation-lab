@@ -1,16 +1,24 @@
 import botocore
-import boto3.session as session
+import boto3
 
 class Profile:
-    def __init__(self, regionName='ap-southeast-2'):
-        self._regionName = regionName
-        self._session= session.Session(region_name=regionName)
+    def __init__(self, srcSession=None, roleName=None, sessionName=None, regionName=None):
+        session = srcSession
+        if not session:
+            if regionName:
+                session = boto3.Session(region_name=regionName)
+            else:
+                session = boto3.Session()
         try:
-            sts_client = self._session.client('sts')
+            sts_client = session.client('sts')
             r = sts_client.get_caller_identity()
             self._userId = r['UserId']
             self._accountId = r['Account']
             self._arn = r['Arn']
+            self._session = session
+            self._regionName = session.region_name
+            self._roleName = roleName if roleName else session.profile_name
+            self._sessionName = sessionName if sessionName else "Initial"
             self._clientMap = {
                 'sts': sts_client
             }
@@ -30,6 +38,9 @@ class Profile:
     def regionName(self):
         return self._regionName
 
+    @property
+    def sessionName(self):
+        return self._sessionName
 
     def getClient(self, serviceName):
         return self._session.client(serviceName)
@@ -39,3 +50,34 @@ class Profile:
 
     def getGlobalAccountArn(self, serviceName, resourceName):
         return "arn:aws:{}::{}:{}".format(serviceName, self._accountId, resourceName)
+
+    def assumeRole(self, accountId, roleName, regionName, sessionName, durationSecs=3600):
+        roleArn = "arn:aws:iam::{}:role/{}".format(accountId, roleName)
+        try:
+            sts_client = self._session.client('sts')
+            response = sts_client.assume_role(
+                RoleArn=roleArn,
+                RoleSessionName=sessionName,
+                DurationSeconds=durationSecs
+            )
+            r = response['Credentials']
+            newSession = boto3.Session(
+                aws_access_key_id=r['AccessKeyId'],
+                aws_secret_access_key=r['SecretAccessKey'],
+                aws_session_token=r['SessionToken'],
+                region_name = regionName
+            )
+            newProfile = Profile(newSession, roleName, sessionName)
+            return newProfile
+        except botocore.exceptions.ClientError as e:
+            print("Unexpected error calling sts.assume_role")
+            print("TargetRoleArn: {}".format(roleArn))
+            print("TargetSessionName: {}".format(sessionName))
+            print("TargetRegionName: {}".format(regionName))
+            print('FromAccount: {}'.format(self._accountId))
+            print('FromRoleName: {}'.format(self._roleName))
+            print('FromSessionName: {}'.format(self._sessionName))
+            print('FromRegionName: {}'.format(self._regionName))
+            print(e)
+            erm = "Role {} Account {} could not assume role {}".format(self._roleName, self._accountId, roleArn)
+            raise Exception(erm)

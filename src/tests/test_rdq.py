@@ -126,8 +126,9 @@ def test_cmk():
     sqsCmkDescription = "Encryption for SQS queued events"
     sqsCmkAlias = "queued_events"
     profile = Profile()
-    producerService = policy.principalEventBridge()
-    cmkStatements = [ policy.allowSQSCMKForServiceProducer(profile, producerService) ]
+    storageServiceNS = policy.serviceNamespaceSQS()
+    producerServiceP = policy.principalEventBridge()
+    cmkStatements = [ policy.allowCMKForServiceProducer(profile, storageServiceNS, producerServiceP) ]
     kmsc = KmsClient(profile)
 #    kmsc.deleteCMK(sqsCmkAlias)
     cmkarn1 = kmsc.declareCMKArn(sqsCmkDescription, sqsCmkAlias, cmkStatements)

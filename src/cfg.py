@@ -9,7 +9,7 @@ def lambdaConfig():
 def codeConfig():
     return {
         'CodeHome': './src',
-        'LambdaFolder': 'lambda',
+        'LambdaFolder': 'lambdas',
         'RulesFolder': 'rules',
         'LibFolder': 'lib'
     }

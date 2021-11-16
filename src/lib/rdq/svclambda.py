@@ -7,7 +7,7 @@ class LambdaClient:
         service = 'lambda'
         self._profile = profile
         self._client = profile.getClient(service)
-        self._utils = ServiceUtils(service, maxAttempts)
+        self._utils = ServiceUtils(profile, service, maxAttempts)
 
     # Allow lambda:GetFunction
     def get_function(self, functionName):

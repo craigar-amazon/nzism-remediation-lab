@@ -13,6 +13,8 @@ def principalLambda():
 def principalEventBridge():
     return "events.amazonaws.com"
 
+def serviceNamespaceSQS():
+    return "sqs"
 
 def trustService(servicePrincipalName):
     return {
@@ -46,13 +48,10 @@ def allowConsumeSQS(queueArn, sid='ConsumeSQS'):
         'Resource': queueArn
     }
 
-def allowSQSCMKForServiceProducer(profile, producerServicePrincipal):
-    return allowCMKForServiceProducer(profile, 'sqs', producerServicePrincipal)
-
-def allowCMKForServiceProducer(profile, storageServiceName, producerServicePrincipal):
-    sid = "Producer service " + producerServicePrincipal + " for " + storageServiceName
-    conditionKey = "kms:EncryptionContext:aws:{}:arn".format(storageServiceName)
-    conditionValue = "arn:aws:{}:{}:{}:*".format(storageServiceName, profile.regionName, profile.accountId)
+def allowCMKForServiceProducer(profile, storageServiceNamespace, producerServicePrincipal):
+    sid = "Producer service " + producerServicePrincipal + " for " + storageServiceNamespace
+    conditionKey = "kms:EncryptionContext:aws:{}:arn".format(storageServiceNamespace)
+    conditionValue = "arn:aws:{}:{}:{}:*".format(storageServiceNamespace, profile.regionName, profile.accountId)
     return {
         'Sid': sid,
         'Effect': "Allow",

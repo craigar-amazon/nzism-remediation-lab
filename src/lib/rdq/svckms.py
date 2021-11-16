@@ -11,7 +11,7 @@ class KmsClient:
         service = 'kms'
         self._profile = profile
         self._client = profile.getClient(service)
-        self._utils = ServiceUtils(service)
+        self._utils = ServiceUtils(profile, service)
 
     def policy_statement_default(self):
         sid = "Enable IAM policies"

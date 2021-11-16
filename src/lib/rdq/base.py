@@ -3,7 +3,8 @@ import json
 
 
 class ServiceUtils:
-    def __init__(self, service, maxAttempts=10):
+    def __init__(self, profile, service, maxAttempts=10):
+        self._profile = profile
         self._service = service
         self._maxAttempts = maxAttempts
     
@@ -51,6 +52,8 @@ class ServiceUtils:
 
     def fail(self, e, op, entityType, entityName, *args):
         print("Unexpected error calling {}:{}".format(self._service, op))
+        print("AccountId: {}".format(self._profile.accountId))
+        print("SessionName: {}".format(self._profile.sessionName))
         print("{}: {}".format(entityType, entityName))
         key = ''
         for a in args:

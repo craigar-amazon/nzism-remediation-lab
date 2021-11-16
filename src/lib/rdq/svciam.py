@@ -19,7 +19,7 @@ class IamClient:
         service = 'iam'
         self._profile = profile
         self._client = profile.getClient(service)
-        self._utils = ServiceUtils(service)
+        self._utils = ServiceUtils(profile, service)
 
     def _policy_arn_customer(self, path, policyName):
         return 'arn:aws:iam::{}:policy{}{}'.format(self._profile.accountId, _canon_path(path), policyName)
