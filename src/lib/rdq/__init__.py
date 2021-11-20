@@ -1,8 +1,24 @@
+import logging
 import botocore
 import boto3
 
+def _logerr(msg):
+    logging.error(msg)
+
 def _role_arn(accountId, roleName):
     return "arn:aws:iam::{}:role/{}".format(accountId, roleName)
+
+class RdqError(Exception):
+    def __init__(self, message):
+        self._message = message
+
+    def __str__(self):
+        return self._message
+    
+    @property
+    def message(self):
+        return self._message
+
 
 class Profile:
     def __init__(self, srcSession=None, roleName=None, sessionName=None, regionName=None):
@@ -22,14 +38,16 @@ class Profile:
             self._regionName = session.region_name
             self._roleName = roleName if roleName else session.profile_name
             self._sessionName = sessionName if sessionName else "Initial"
+            self._isPreviewing = False
+            self._previewLog = []
         except botocore.exceptions.ClientError as e:
             erc = e.response['Error']['Code'] 
             if erc == 'ExpiredToken':
-                raise Exception("Your credentials have expired")
-            print("Unexpected error calling sts.get_caller_identity")
-            print(e)
-            raise Exception("Your credentials are invalid")
-
+                raise RdqError("Your credentials have expired")
+            _logerr("Unexpected error calling sts.get_caller_identity")
+            _logerr(e)
+            raise RdqError("Your credentials are invalid")
+    
     @property
     def accountId(self):
         return self._accountId
@@ -73,14 +91,30 @@ class Profile:
             newProfile = Profile(newSession, roleName, sessionName)
             return newProfile
         except botocore.exceptions.ClientError as e:
-            print("Unexpected error calling sts.assume_role")
-            print("TargetRoleArn: {}".format(roleArn))
-            print("TargetSessionName: {}".format(sessionName))
-            print("TargetRegionName: {}".format(regionName))
-            print('FromAccount: {}'.format(self._accountId))
-            print('FromRoleName: {}'.format(self._roleName))
-            print('FromSessionName: {}'.format(self._sessionName))
-            print('FromRegionName: {}'.format(self._regionName))
-            print(e)
+            _logerr("Unexpected error calling sts.assume_role")
+            _logerr("TargetRoleArn: {}".format(roleArn))
+            _logerr("TargetSessionName: {}".format(sessionName))
+            _logerr("TargetRegionName: {}".format(regionName))
+            _logerr('FromAccount: {}'.format(self._accountId))
+            _logerr('FromRoleName: {}'.format(self._roleName))
+            _logerr('FromSessionName: {}'.format(self._sessionName))
+            _logerr('FromRegionName: {}'.format(self._regionName))
+            _logerr(e)
             erm = "Role {} Account {} could not assume role {}".format(self._roleName, self._accountId, roleArn)
-            raise Exception(erm)
+            raise RdqError(erm)
+
+    def enablePreview(self, enable=True):
+        exLog = self._previewLog
+        self._isPreviewing = enable
+        self._previewLog = []
+        return exLog
+
+    @property
+    def isPreviewing(self):
+        return self._isPreviewing
+
+    def preview(self, op, args):
+        if not self._isPreviewing: return False
+        rec = {'api': op, 'args': args}
+        self._previewLog.append(rec)
+        return True

@@ -22,6 +22,11 @@ class S3ControlClient:
     def put_public_access_block(self, accountId, cfg):
         op = 'put_public_access_block'
         accountId = self._profile.accountId
+        args = {
+            'PublicAccessBlockConfiguration': cfg,
+            'AccountId': accountId
+        }
+        if self._utils.preview(op, args): return
         try:
             self._client.put_public_access_block(
                 PublicAccessBlockConfiguration=cfg,

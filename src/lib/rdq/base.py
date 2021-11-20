@@ -1,6 +1,9 @@
+import logging
 import time
 import json
 
+def _logerr(msg):
+    logging.error(msg)
 
 class ServiceUtils:
     def __init__(self, profile, service, maxAttempts=10):
@@ -51,19 +54,24 @@ class ServiceUtils:
         }
 
     def fail(self, e, op, entityType, entityName, *args):
-        print("Unexpected error calling {}:{}".format(self._service, op))
-        print("AccountId: {}".format(self._profile.accountId))
-        print("SessionName: {}".format(self._profile.sessionName))
-        print("{}: {}".format(entityType, entityName))
+        _logerr("Unexpected error calling {}:{}".format(self._service, op))
+        _logerr("AccountId: {}".format(self._profile.accountId))
+        _logerr("SessionName: {}".format(self._profile.sessionName))
+        _logerr("{}: {}".format(entityType, entityName))
         key = ''
         for a in args:
             if key:
-                print("{}: {}".format(key, a))
+                _logerr("{}: {}".format(key, a))
                 key = ''
             else:
                 key = a
         if key:
-            print(key)
-        print(e)
+            _logerr(key)
+        _logerr(e)
         return "Unexpected error calling {} on {}".format(op, entityName)
+
+    def preview(self, op, args):
+        svcop = "{}:{}".format(self._service, op)
+        return self._profile.preview(svcop, args)
+
 

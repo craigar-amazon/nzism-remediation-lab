@@ -67,13 +67,13 @@ def getCoreCode(baseFunctionName):
     return get_lambda_code_bytes(baseFunctionName, libs, typeFolder)
 
 def getRuleCode(baseFunctionName):
-    libs = ['rdq']
+    libs = ['rdq', 'rule']
     codeCfg = codeConfig()
     typeFolder = requiredProp(codeCfg, 'RulesFolder')
     return get_lambda_code_bytes(baseFunctionName, libs, typeFolder)
 
 def getTestCode(baseFunctionName):
-    libs = ['rdq']
+    libs = ['rdq', 'rule']
     typeFolder = 'test'
     return get_lambda_code_bytes(baseFunctionName, libs, typeFolder)
 
