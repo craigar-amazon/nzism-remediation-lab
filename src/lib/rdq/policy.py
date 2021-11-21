@@ -83,3 +83,21 @@ def allowCMKForServiceProducer(profile, storageServiceNamespace, producerService
             }
         }
     }
+
+def allowSQSForServiceProducer(profile, queueName, producerServicePrincipal, sourceArn):
+    sid = "Producer service " + producerServicePrincipal + " for SQS"
+    resourceArn = profile.getRegionAccountArn('sqs', queueName)
+    return {
+        'Sid': sid,
+        'Effect': "Allow",
+        'Principal': {
+            'Service': producerServicePrincipal
+        },
+        'Action': "sqs:SendMessage",
+        'Resource': resourceArn,
+        'Condition': {
+            'ArnLike': {
+                "aws:SourceArn": sourceArn
+            }
+        }
+    }

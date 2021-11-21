@@ -19,12 +19,13 @@ class S3ControlClient:
         except botocore.exceptions.ClientError as e:
             raise RdqError(self._utils.fail(e, op, 'AccountId', accountId))
 
+    # PREVIEW
     def put_public_access_block(self, accountId, cfg):
         op = 'put_public_access_block'
         accountId = self._profile.accountId
         args = {
-            'PublicAccessBlockConfiguration': cfg,
-            'AccountId': accountId
+            'AccountId': accountId,
+            'PublicAccessBlockConfiguration': cfg
         }
         if self._utils.preview(op, args): return
         try:
@@ -35,6 +36,7 @@ class S3ControlClient:
         except botocore.exceptions.ClientError as e:
             raise RdqError(self._utils.fail(e, op, 'AccountId', accountId))
 
+    # PREVIEW
     def declarePublicAccessBlock(self, targetAccountId=None, requiredState=True):
         accountId = targetAccountId if targetAccountId else self._profile.accountId
         keys = ['BlockPublicAcls', 'IgnorePublicAcls', 'BlockPublicPolicy', 'RestrictPublicBuckets']

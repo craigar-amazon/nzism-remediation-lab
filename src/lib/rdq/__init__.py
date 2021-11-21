@@ -63,6 +63,9 @@ class Profile:
     def getClient(self, serviceName):
         return self._session.client(serviceName)
 
+    def getAccountPrincipalArn(self):
+        return "arn:aws:iam::{}:root".format(self._accountId)
+
     def getRegionAccountArn(self, serviceName, resourceName):
         return "arn:aws:{}:{}:{}:{}".format(serviceName, self._regionName, self._accountId, resourceName)
 

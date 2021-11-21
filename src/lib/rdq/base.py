@@ -13,7 +13,13 @@ class ServiceUtils:
     
     def is_resource_not_found(self, e):
         erc = e.response['Error']['Code']
-        return (erc == 'NoSuchEntity') or (erc == 'ResourceNotFoundException') or (erc == 'NotFoundException')
+        svc = self._service
+        if erc == 'ResourceNotFoundException': return True
+        if erc == 'NotFoundException': return True
+        if erc == 'NoSuchEntity': return True
+        if svc == 'sqs':
+            return erc == 'AWS.SimpleQueueService.NonExistentQueue'
+        return False
 
     def is_role_propagation_delay(self, e):
         erc = e.response['Error']['Code']
@@ -35,6 +41,9 @@ class ServiceUtils:
 
     def retry_propagation_delay(self, e, tracker):
         return self.retry(tracker) and self.is_role_propagation_delay(e)
+
+    def sleep(self, waitSecs):
+        time.sleep(waitSecs)
 
     def to_json(self, src):
         if type(src) is str:
