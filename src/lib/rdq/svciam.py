@@ -1,5 +1,6 @@
 import botocore
 
+from lib.rdq import RdqError
 from .base import ServiceUtils
 
 def _canon_path(path):
@@ -33,7 +34,7 @@ class IamClient:
             return response['Role']
         except botocore.exceptions.ClientError as e:
             if self._utils.is_resource_not_found(e): return None
-            raise Exception(self._utils.fail(e, op, 'RoleName', roleName))
+            raise RdqError(self._utils.fail(e, op, 'RoleName', roleName))
 
     def get_policy(self, policyArn):
         op = 'get_policy'
@@ -44,7 +45,7 @@ class IamClient:
             return response['Policy']
         except botocore.exceptions.ClientError as e:
             if self._utils.is_resource_not_found(e): return None
-            raise Exception(self._utils.fail(e, op, 'PolicyArn', policyArn))
+            raise RdqError(self._utils.fail(e, op, 'PolicyArn', policyArn))
 
     def load_policy_version_json(self, policyArn, versionId):
         op = 'get_policy_version'
@@ -56,7 +57,7 @@ class IamClient:
             doc = response['PolicyVersion']['Document']
             return self._utils.to_json(doc)
         except botocore.exceptions.ClientError as e:
-            raise Exception(self._utils.fail(e, op, 'PolicyArn', policyArn, 'VersionId', versionId))
+            raise RdqError(self._utils.fail(e, op, 'PolicyArn', policyArn, 'VersionId', versionId))
 
     def list_policy_versions(self, policyArn):
         op = 'list_policy_versions'
@@ -66,7 +67,7 @@ class IamClient:
             )
             if response['IsTruncated']:
                 erm = 'Policy version list is truncated for {}'.format(policyArn)
-                raise Exception(erm)
+                raise RdqError(erm)
             nonDefaultVersions = []
             defaultVersionId = None
             for version in response['Versions']:
@@ -77,13 +78,13 @@ class IamClient:
                     nonDefaultVersions.append(versionId)
             if not defaultVersionId:
                 erm = 'No default version for {}'.format(policyArn)
-                raise Exception(erm)
+                raise RdqError(erm)
             return {
                 'nonDefaultVersionIdsAsc': sorted(nonDefaultVersions),
                 'defaultVersionId': defaultVersionId
             }
         except botocore.exceptions.ClientError as e:
-            raise Exception(self._utils.fail(e, op, 'PolicyArn', policyArn))
+            raise RdqError(self._utils.fail(e, op, 'PolicyArn', policyArn))
 
     def delete_policy(self, policyArn):
         op = 'delete_policy'
@@ -94,7 +95,7 @@ class IamClient:
             return True
         except botocore.exceptions.ClientError as e:
             if self._utils.is_resource_not_found(e): return False
-            raise Exception(self._utils.fail(e, op, 'PolicyArn', policyArn))
+            raise RdqError(self._utils.fail(e, op, 'PolicyArn', policyArn))
 
     def delete_policy_version(self, policyArn, versionId):
         op = 'delete_policy_version'
@@ -106,7 +107,7 @@ class IamClient:
             return True
         except botocore.exceptions.ClientError as e:
             if self._utils.is_resource_not_found(e): return False
-            raise Exception(self._utils.fail(e, op, 'PolicyArn', policyArn, 'VersionId', versionId))
+            raise RdqError(self._utils.fail(e, op, 'PolicyArn', policyArn, 'VersionId', versionId))
 
     def create_policy_arn(self, policyPath, policyName, policyDescription, policyJson):
         op = 'create_policy'
@@ -119,7 +120,7 @@ class IamClient:
             )
             return response['Policy']['Arn']
         except botocore.exceptions.ClientError as e:
-            raise Exception(self._utils.fail(e, op, 'PolicyName', policyName, 'PolicyPath', policyPath))
+            raise RdqError(self._utils.fail(e, op, 'PolicyName', policyName, 'PolicyPath', policyPath))
 
     def create_policy_version_id(self, policyArn, policyJson):
         op = 'create_policy_version'
@@ -131,7 +132,7 @@ class IamClient:
             )
             return response['PolicyVersion']['VersionId']
         except botocore.exceptions.ClientError as e:
-            raise Exception(self._utils.fail(e, op, 'PolicyArn', policyArn))
+            raise RdqError(self._utils.fail(e, op, 'PolicyArn', policyArn))
 
     def load_attached_role_policy_arnset(self, roleName):
         op = 'list_attached_role_policies'
@@ -141,7 +142,7 @@ class IamClient:
             )
             if response['IsTruncated']:
                 erm = 'Attached policy list is truncated for role {}'.format(roleName)
-                raise Exception(erm)
+                raise RdqError(erm)
             policyAttachments = response['AttachedPolicies']
             arnset = set()
             for policyAttach in policyAttachments:
@@ -149,7 +150,7 @@ class IamClient:
             return arnset
         except botocore.exceptions.ClientError as e:
             if self._utils.is_resource_not_found(e): return set()
-            raise Exception(self._utils.fail(e, op, 'RoleName', roleName))
+            raise RdqError(self._utils.fail(e, op, 'RoleName', roleName))
 
     def load_inline_role_policy_nameset(self, roleName):
         op = 'list_role_policies'
@@ -159,7 +160,7 @@ class IamClient:
             )
             if response['IsTruncated']:
                 erm = 'Inline policy list is truncated for role {}'.format(roleName)
-                raise Exception(erm)
+                raise RdqError(erm)
             policyNames = response['PolicyNames']
             nameset = set()
             for policyName in policyNames:
@@ -167,7 +168,7 @@ class IamClient:
             return nameset
         except botocore.exceptions.ClientError as e:
             if self._utils.is_resource_not_found(e): return set()
-            raise Exception(self._utils.fail(e, op, 'RoleName', roleName))
+            raise RdqError(self._utils.fail(e, op, 'RoleName', roleName))
 
     def attach_role_managed_policy(self, roleName, policyArn):
         op = 'attach_role_policy'
@@ -177,7 +178,7 @@ class IamClient:
                 PolicyArn=policyArn
             )
         except botocore.exceptions.ClientError as e:
-            raise Exception(self._utils.fail(e, op, 'RoleName', roleName, 'PolicyArn', policyArn))
+            raise RdqError(self._utils.fail(e, op, 'RoleName', roleName, 'PolicyArn', policyArn))
 
     def detach_role_managed_policy(self, roleName, policyArn):
         op = 'detach_role_policy'
@@ -187,7 +188,7 @@ class IamClient:
                 PolicyArn=policyArn
             )
         except botocore.exceptions.ClientError as e:
-            raise Exception(self._utils.fail(e, op, 'RoleName', roleName, 'PolicyArn', policyArn))
+            raise RdqError(self._utils.fail(e, op, 'RoleName', roleName, 'PolicyArn', policyArn))
 
     def get_role_inline_policy_json(self, roleName, policyName):
         op = 'get_role_policy'
@@ -199,7 +200,7 @@ class IamClient:
             src = response['PolicyDocument']
             return self._utils.to_json(src)
         except botocore.exceptions.ClientError as e:
-            raise Exception(self._utils.fail(e, op, 'RoleName', roleName, 'PolicyName', policyName))
+            raise RdqError(self._utils.fail(e, op, 'RoleName', roleName, 'PolicyName', policyName))
 
     def put_role_inline_policy(self, roleName, policyName, policyJson):
         op = 'put_role_policy'
@@ -210,7 +211,7 @@ class IamClient:
                 PolicyDocument=policyJson
             )
         except botocore.exceptions.ClientError as e:
-            raise Exception(self._utils.fail(e, op, 'RoleName', roleName, 'PolicyName', policyName))
+            raise RdqError(self._utils.fail(e, op, 'RoleName', roleName, 'PolicyName', policyName))
 
     def delete_role_inline_policy(self, roleName, policyName):
         op = 'put_role_policy'
@@ -220,7 +221,7 @@ class IamClient:
                 PolicyName=policyName
             )
         except botocore.exceptions.ClientError as e:
-            raise Exception(self._utils.fail(e, op, 'RoleName', roleName, 'PolicyName', policyName))
+            raise RdqError(self._utils.fail(e, op, 'RoleName', roleName, 'PolicyName', policyName))
 
     def create_role_arn(self, roleName, roleDescription, trustPolicyJson, rolePath, maxSessionSecs):
         op = 'create_role'
@@ -234,7 +235,7 @@ class IamClient:
             )
             return response['Role']['Arn']
         except botocore.exceptions.ClientError as e:
-            raise Exception(self._utils.fail(e, op, 'RoleName', roleName))
+            raise RdqError(self._utils.fail(e, op, 'RoleName', roleName))
 
     def update_role(self, roleName, roleDescription, maxSessionSecs):
         op = 'update_role'
@@ -245,7 +246,7 @@ class IamClient:
                 MaxSessionDuration=maxSessionSecs
             )
         except botocore.exceptions.ClientError as e:
-            raise Exception(self._utils.fail(e, op, 'RoleName', roleName))
+            raise RdqError(self._utils.fail(e, op, 'RoleName', roleName))
 
     def update_assume_role_policy(self, roleName, trustPolicyJson):
         op = 'update_role'
@@ -255,7 +256,7 @@ class IamClient:
                 PolicyDocument=trustPolicyJson
             )
         except botocore.exceptions.ClientError as e:
-            raise Exception(self._utils.fail(e, op, 'RoleName', roleName))
+            raise RdqError(self._utils.fail(e, op, 'RoleName', roleName))
 
     def delete_role(self, roleName):
         op = 'delete_role'
@@ -266,7 +267,7 @@ class IamClient:
             return True
         except botocore.exceptions.ClientError as e:
             if self._utils.is_resource_not_found(e): return False
-            raise Exception(self._utils.fail(e, op, 'RoleName', roleName))
+            raise RdqError(self._utils.fail(e, op, 'RoleName', roleName))
 
     def delete_policy_versions(self, policyArn):
         versionMap = self.list_policy_versions(policyArn)
@@ -297,7 +298,7 @@ class IamClient:
         exPolicy = self.get_policy(policyArn)
         if not exPolicy:
             erm = "AWS Policy {} is undefined".format(policyArn)
-            raise Exception(erm)
+            raise RdqError(erm)
         exPolicyArn = exPolicy['Arn']
         return exPolicyArn
 

@@ -1,5 +1,6 @@
 import botocore
 
+from lib.rdq import RdqError
 from .base import ServiceUtils
 
 
@@ -35,7 +36,7 @@ class KmsClient:
             return response['KeyMetadata']
         except botocore.exceptions.ClientError as e:
             if self._utils.is_resource_not_found(e): return None
-            raise Exception(self._utils.fail(e, op, 'KeyId', keyId))
+            raise RdqError(self._utils.fail(e, op, 'KeyId', keyId))
 
     def create_key_arn(self, description, policyJson):
         op = 'create_key'
@@ -47,7 +48,7 @@ class KmsClient:
             )
             return response['KeyMetadata']['Arn']
         except botocore.exceptions.ClientError as e:
-            raise Exception(self._utils.fail(e, op, 'Description', description))
+            raise RdqError(self._utils.fail(e, op, 'Description', description))
 
     def create_alias(self, aliasName, cmkArn):
         op = 'create_alias'
@@ -57,7 +58,7 @@ class KmsClient:
                 TargetKeyId=cmkArn
             )
         except botocore.exceptions.ClientError as e:
-            raise Exception(self._utils.fail(e, op, 'AliasName', aliasName, 'CmkArn', cmkArn))
+            raise RdqError(self._utils.fail(e, op, 'AliasName', aliasName, 'CmkArn', cmkArn))
 
     def get_key_policy(self, cmkArn):
         op = 'get_key_policy'
@@ -68,7 +69,7 @@ class KmsClient:
             )
             return response['Policy']
         except botocore.exceptions.ClientError as e:
-            raise Exception(self._utils.fail(e, op, 'CmkArn', cmkArn))
+            raise RdqError(self._utils.fail(e, op, 'CmkArn', cmkArn))
 
     def put_key_policy(self, cmkArn, policyJson):
         op = 'put_key_policy'
@@ -79,7 +80,7 @@ class KmsClient:
                 Policy=policyJson
             )
         except botocore.exceptions.ClientError as e:
-            raise Exception(self._utils.fail(e, op, 'CmkArn', cmkArn))
+            raise RdqError(self._utils.fail(e, op, 'CmkArn', cmkArn))
 
     def get_key_rotation_status(self, cmkArn):
         op = 'get_key_rotation_status'
@@ -89,7 +90,7 @@ class KmsClient:
             )
             return response['KeyRotationEnabled']
         except botocore.exceptions.ClientError as e:
-            raise Exception(self._utils.fail(e, op, 'CmkArn', cmkArn))
+            raise RdqError(self._utils.fail(e, op, 'CmkArn', cmkArn))
 
 
     def update_key_description(self, cmkArn, description):
@@ -100,7 +101,7 @@ class KmsClient:
                 Description=description
             )
         except botocore.exceptions.ClientError as e:
-            raise Exception(self._utils.fail(e, op, 'CmkArn', cmkArn))
+            raise RdqError(self._utils.fail(e, op, 'CmkArn', cmkArn))
 
     def enable_key_rotation(self, cmkArn):
         op = 'enable_key_rotation'
@@ -109,7 +110,7 @@ class KmsClient:
                 KeyId=cmkArn
             )
         except botocore.exceptions.ClientError as e:
-            raise Exception(self._utils.fail(e, op, 'CmkArn', cmkArn))
+            raise RdqError(self._utils.fail(e, op, 'CmkArn', cmkArn))
 
     def schedule_key_deletion(self, cmkArn, pendingWindowInDays):
         op = 'schedule_key_deletion'
@@ -121,7 +122,7 @@ class KmsClient:
             return True
         except botocore.exceptions.ClientError as e:
             if self._utils.is_resource_not_found(e): return False
-            raise Exception(self._utils.fail(e, op, 'CmkArn', cmkArn))
+            raise RdqError(self._utils.fail(e, op, 'CmkArn', cmkArn))
 
     def delete_alias(self, canonAlias):
         op = 'delete_alias'
@@ -132,7 +133,7 @@ class KmsClient:
             return True
         except botocore.exceptions.ClientError as e:
             if self._utils.is_resource_not_found(e): return False
-            raise Exception(self._utils.fail(e, op, 'AliasName', canonAlias))
+            raise RdqError(self._utils.fail(e, op, 'AliasName', canonAlias))
 
     def declareCMKArn(self, description, alias, policyStatements):
         statements = [self.policy_statement_default()]
@@ -150,7 +151,7 @@ class KmsClient:
                 createReqd = False
             else:
                 erm = 'KMS CMK {} in unexpected state {}'.format(alias, keyState)
-                raise Exception(erm)
+                raise RdqError(erm)
         else:
             createReqd = True
         if createReqd:

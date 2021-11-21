@@ -1,5 +1,6 @@
 import botocore
 
+from lib.rdq import RdqError
 from .base import ServiceUtils
 
 class LambdaClient:
@@ -19,7 +20,7 @@ class LambdaClient:
             return response
         except botocore.exceptions.ClientError as e:
             if self._utils.is_resource_not_found(e): return None
-            raise Exception(self._utils.fail(e, op, 'FunctionName', functionName))
+            raise RdqError(self._utils.fail(e, op, 'FunctionName', functionName))
 
     # Allow lambda:CreateFunction
     def create_function(self, functionName, functionDescription, roleArn, cfg, codeZip):
@@ -44,7 +45,7 @@ class LambdaClient:
                 if self._utils.retry_propagation_delay(e, tracker):
                     tracker = self._utils.backoff(tracker)
                     continue
-                raise Exception(self._utils.fail(e, op, 'FunctionName', functionName, 'RoleArn', roleArn, 'Tracker', tracker))
+                raise RdqError(self._utils.fail(e, op, 'FunctionName', functionName, 'RoleArn', roleArn, 'Tracker', tracker))
 
     # Allow lambda:UpdateFunctionConfiguration
     def update_function_configuration(self, functionName, functionDescription, roleArn, cfg):
@@ -66,7 +67,7 @@ class LambdaClient:
                 if self._utils.retry_propagation_delay(e, tracker):
                     tracker = self._utils.backoff(tracker)
                     continue
-                raise Exception(self._utils.fail(e, op, 'FunctionName', functionName, 'RoleArn', roleArn, 'Tracker', tracker))
+                raise RdqError(self._utils.fail(e, op, 'FunctionName', functionName, 'RoleArn', roleArn, 'Tracker', tracker))
 
     # Allow lambda:UpdateFunctionCode
     def update_function_code(self, functionName, codeZip):
@@ -78,7 +79,7 @@ class LambdaClient:
             )
             return response
         except botocore.exceptions.ClientError as e:
-            raise Exception(self._utils.fail(e, op, 'FunctionName', functionName))
+            raise RdqError(self._utils.fail(e, op, 'FunctionName', functionName))
 
 
     def get_policy(self, functionArn):
@@ -90,7 +91,7 @@ class LambdaClient:
             return response
         except botocore.exceptions.ClientError as e:
             if self._utils.is_resource_not_found(e): return None
-            raise Exception(self._utils.fail(e, op, 'FunctionArn', functionArn))
+            raise RdqError(self._utils.fail(e, op, 'FunctionArn', functionArn))
 
     def add_permission(self, functionArn, sid, action, principal, sourceArn):
         op = 'add_permission'
@@ -103,7 +104,7 @@ class LambdaClient:
                 SourceArn = sourceArn
             )
         except botocore.exceptions.ClientError as e:
-            raise Exception(self._utils.fail(e, op, 'FunctionArn', functionArn, 'Principal', principal))
+            raise RdqError(self._utils.fail(e, op, 'FunctionArn', functionArn, 'Principal', principal))
 
     def remove_permission(self, functionArn, sid):
         op = 'remove_permission'
@@ -115,7 +116,7 @@ class LambdaClient:
             return True
         except botocore.exceptions.ClientError as e:
             if self._utils.is_resource_not_found(e): return False
-            raise Exception(self._utils.fail(e, op, 'FunctionArn', functionArn, 'Sid', sid))
+            raise RdqError(self._utils.fail(e, op, 'FunctionArn', functionArn, 'Sid', sid))
 
 
     # Allow lambda:DeleteFunction
@@ -128,7 +129,7 @@ class LambdaClient:
             return True
         except botocore.exceptions.ClientError as e:
             if self._utils.is_resource_not_found(e): return False
-            raise Exception(self._utils.fail(e, op, 'FunctionName', functionName))
+            raise RdqError(self._utils.fail(e, op, 'FunctionName', functionName))
 
     # Allow lambda:InvokeFunction
     def invoke_function_json(self, functionName, payloadMap):
@@ -149,9 +150,7 @@ class LambdaClient:
                 'Payload': outMap
             }
         except botocore.exceptions.ClientError as e:
-            self._utils.fail(e, op, 'FunctionName', functionName)
-            return None
-
+            raise RdqError(self._utils.fail(e, op, 'FunctionName', functionName))
 
     def declareFunctionArn(self, functionName, functionDescription, roleArn, cfg, codeZip):
         exFunction = self.get_function(functionName)

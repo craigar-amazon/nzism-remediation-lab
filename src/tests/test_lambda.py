@@ -1,4 +1,4 @@
-from lib.rdq import Profile
+from lib.rdq import Profile, RdqError
 from lib.rdq.svciam import IamClient
 from lib.rdq.svclambda import LambdaClient
 import lib.rdq.policy as policy
@@ -12,16 +12,18 @@ def targetAccountId():
 def dispatchAccountId():
     return '746869318262'
 
-def targetRoleName():
+def targetRoleNameDirect():
     return 'UnitTestTargetRole'
 
+def targetRoleNameCT():
+    return 'aws-controltower-AdministratorExecutionRole'
 
 def setup_targetAccount():
     print("ACTION: Ensure credentials set to target application account")
     trustAccountId = dispatchAccountId()
     profile = Profile()
     iam = IamClient(profile)
-    roleName = targetRoleName()
+    roleName = targetRoleNameDirect()
     roleDescription = 'Role for executing unit tests from {}'.format(trustAccountId)
     trustPolicy = policy.trustAccount(trustAccountId)
     roleArn = iam.declareRoleArn(roleName, roleDescription, trustPolicy)
@@ -35,7 +37,7 @@ def setup_targetAccount():
 def test_s3bpa_direct():
     print("ACTION: Ensure credentials set to dispatching audit account")
     toAccountId = targetAccountId()
-    roleName = targetRoleName()
+    roleName = targetRoleNameCT()
     event = {
         'preview': True,
         'conformancePackName': 'UnitTest',
@@ -56,17 +58,19 @@ def test_s3bpa_direct():
     print(response)
 
 
-def test_s3bpa_invoke(targetAccountId):
+def test_s3bpa_invoke():
+    print("ACTION: Ensure credentials set to dispatching audit account")
+    toAccountId = targetAccountId()
     event = {
-        'preview': True,
+        'preview': False,
         'conformancePackName': 'UnitTest',
-        'configRuleName': 's3-account-level-public-access-blocks-periodic',
+        'configRuleName': 's3-account-level-public-access-blocks-periodicXXX',
         'target': {
-            'awsAccountId': targetAccountId,
+            'awsAccountId': toAccountId,
             'awsRegion': 'ap-southeast-2',
             'roleName': 'aws-controltower-AdministratorExecutionRole',
             'resourceType': 'AWS::::Account',
-            'resourceId': targetAccountId
+            'resourceId': toAccountId
         }
     }
     functionCfg = {
@@ -75,18 +79,22 @@ def test_s3bpa_invoke(targetAccountId):
         'Timeout': 180,
         'MemorySize': 128
     }
-    codeZip = getTestCode('ApplyS3BPA')
-    profile = Profile()
-    lambdac = LambdaClient(profile)
-    functionName = "UnitTestS3BPALambda"
-    functionDescription = "UnitTest S3BPA Lambda"
-    lambdaRoleName = 'aws-controltower-AuditAdministratorRole'
-    roleArn = profile.getRoleArn(lambdaRoleName)
-    lambdaArn = lambdac.declareFunctionArn(functionName, functionDescription, roleArn, functionCfg, codeZip)
-    functionOut = lambdac.invokeFunctionJson(functionName, event)
-    print(functionOut)
+    try:
+        codeZip = getTestCode('ApplyS3BPA')
+        profile = Profile()
+        lambdac = LambdaClient(profile)
+        functionName = "UnitTestS3BPALambda"
+        functionDescription = "UnitTest S3BPA Lambda"
+        lambdaRoleName = 'aws-controltower-AuditAdministratorRole'
+        roleArn = profile.getRoleArn(lambdaRoleName)
+        lambdaArn = lambdac.declareFunctionArn(functionName, functionDescription, roleArn, functionCfg, codeZip)
+        functionOut = lambdac.invokeFunctionJson(functionName, event)
+        print(functionOut)
+    except RdqError as e:
+        print(e)
+        assert False
 
 
 # setup_targetAccount()
-test_s3bpa_direct()
-# test_s3bpa_invoke('119399605612')
+# test_s3bpa_direct()
+test_s3bpa_invoke()
