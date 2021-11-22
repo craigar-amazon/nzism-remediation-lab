@@ -1,9 +1,11 @@
 import unittest
 from lib.rdq import Profile
 from lib.rdq.svciam import IamClient
+from lib.rdq.svcorg import OrganizationClient
 from lib.rdq.svclambda import LambdaClient
 from lib.rdq.svckms import KmsClient
 from lib.rdq.svcsqs import SQSClient
+from lib.rdq.svceventbridge import EventBridgeClient
 import lib.rdq.policy as policy
 from cmds.codeLoader import getTestCode
 
@@ -69,7 +71,6 @@ class TestRdq(unittest.TestCase):
         assert roleArn3 == expectedRoleArn
         iam.deleteRole(roleName)
         assert not iam.getRole(roleName)
-
 
     def test_role_build(self):
         profile = Profile()
@@ -151,10 +152,13 @@ class TestRdq(unittest.TestCase):
         cmkarn1 = kmsc.declareCMKArn(sqsCmkDescription, sqsCmkAlias, cmkStatements)
         assert cmkarn1
 
-    def test_sqs(self):
+    def test_eventBus(self):
         profile = Profile()
+        ebc = EventBridgeClient(profile)
         kmsc = KmsClient(profile)
         sqsc = SQSClient(profile)
+        orgc = OrganizationClient(profile)
+
         sqsCmkDescription = "Encryption for SQS queued events"
         sqsCmkAlias = "queued_events"
         storageServiceNS = policy.serviceNamespaceSQS()
@@ -162,21 +166,43 @@ class TestRdq(unittest.TestCase):
         cmkStatements = [ policy.allowCMKForServiceProducer(profile, storageServiceNS, producerServiceP) ]
         cmkarn = kmsc.declareCMKArn(sqsCmkDescription, sqsCmkAlias, cmkStatements)
         queueName = 'UnitTestQueue1'
-        eventBridgeRuleArn = 'arn:aws:events:ap-southeast-2:746869318262:rule/NZISM-AutoRemediation/ComplianceChange'
-        sqsStatements = [ policy.allowSQSForServiceProducer(profile, queueName, producerServiceP, eventBridgeRuleArn) ]
+        eventBusName = 'UnitTestBus1'
+        ruleName = 'ComplianceChange'
+        ruleDescription = "Config Rule Compliance Change"
+        eventPattern = {
+            'source': ["aws.config"],
+            'detail-type': ["Config Rules Compliance Change"]
+        }
+        maxAgeSecs = 12 * 3600
+        ebArnExpected = profile.getRegionAccountArn('events', "event-bus/{}".format(eventBusName))
+        ruleArnExpected = profile.getRegionAccountArn('events', "rule/{}/{}".format(eventBusName, ruleName))
+        orgId = orgc.getOrganizationId()
+        ebArn = ebc.declareEventBusArn(eventBusName)
+        self.assertEqual(ebArn, ebArnExpected)
+        ruleArn = ebc.declareEventBusRuleArn(eventBusName, ruleName, ruleDescription, eventPattern)
+        self.assertEqual(ruleArn, ruleArnExpected)
+        sqsStatements = [ policy.allowSQSForServiceProducer(profile, queueName, producerServiceP, ruleArn) ]
         sqsVisibilityTimeoutSecs = 15 * 60
+        sqsArn = sqsc.declareQueueArn(queueName, cmkarn, sqsStatements, sqsVisibilityTimeoutSecs)
+        sqsArnExpected = profile.getRegionAccountArn('sqs', queueName)
+        self.assertEqual(sqsArn, sqsArnExpected)
+        ebc.declareEventBusTarget(eventBusName, ruleName, queueName, sqsArn, maxAgeSecs)
+        ebc.declareEventBusPublishPermissionForOrganization(eventBusName, orgId)
 
-        sqsarn = sqsc.declareQueue(queueName, cmkarn, sqsStatements, sqsVisibilityTimeoutSecs)
-        sqsarn_expected = profile.getRegionAccountArn('sqs', queueName)
-        self.assertEqual(sqsarn, sqsarn_expected, "SQS ARN")
-        sqsarn = sqsc.declareQueue(queueName, cmkarn, sqsStatements, (sqsVisibilityTimeoutSecs + 1))
-        self.assertEqual(sqsarn, sqsarn_expected, "SQS ARN")
+        ebArn1 = ebc.declareEventBusArn(eventBusName)
+        self.assertEqual(ebArn, ebArn1, "Idempotent EventBus")
+        sqsArn1 = sqsc.declareQueueArn(queueName, cmkarn, sqsStatements, (sqsVisibilityTimeoutSecs + 1))
+        self.assertEqual(sqsArn, sqsArn1, "Idempotent Queue")
+        ebc.declareEventBusTarget(eventBusName, ruleName, queueName, sqsArn, (maxAgeSecs + 1))
+
         sqsc.deleteQueue(queueName)
+        ebc.deleteEventBus(eventBusName)
+
 
 
 if __name__ == '__main__':
     loader = unittest.TestLoader()
-    loader.testMethodPrefix = "test_"
+    loader.testMethodPrefix = "test_eventBus"
     unittest.main(warnings='default', testLoader = loader)
     # setup_assume_role('746869318262')
     # test_assume_role('119399605612')

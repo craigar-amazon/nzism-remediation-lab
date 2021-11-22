@@ -97,7 +97,7 @@ class SQSClient:
             raise RdqError(self._utils.fail(e, op, 'QueueName', queueName))
 
     #PREVIEW
-    def declareQueue(self, queueName, kmsMasterKeyId, policyStatements, visibilityTimeoutSecs):
+    def declareQueueArn(self, queueName, kmsMasterKeyId, policyStatements, visibilityTimeoutSecs):
         statements = [self._policy_statement_default(queueName)]
         statements.extend(policyStatements)
         policyMap = self._utils.policy_map(statements)

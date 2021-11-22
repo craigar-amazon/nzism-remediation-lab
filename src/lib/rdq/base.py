@@ -62,11 +62,16 @@ class ServiceUtils:
             'Statement': statements
         }
 
+    def diagnostic(self, op, msg):
+        _logerr("Diagnostic information for {}:{}".format(self._service, op))
+        _logerr(msg)
+
     def fail(self, e, op, entityType, entityName, *args):
         _logerr("Unexpected error calling {}:{}".format(self._service, op))
         _logerr("AccountId: {}".format(self._profile.accountId))
         _logerr("SessionName: {}".format(self._profile.sessionName))
-        _logerr("{}: {}".format(entityType, entityName))
+        if entityType and entityName:
+            _logerr("{}: {}".format(entityType, entityName))
         key = ''
         for a in args:
             if key:
@@ -77,7 +82,8 @@ class ServiceUtils:
         if key:
             _logerr(key)
         _logerr(e)
-        return "Unexpected error calling {} on {}".format(op, entityName)
+        if entityName: return "Unexpected error calling {} on {}".format(op, entityName)
+        return "Unexpected error calling {}".format(op)
 
     def preview(self, op, args):
         svcop = "{}:{}".format(self._service, op)
