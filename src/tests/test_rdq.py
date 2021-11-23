@@ -7,7 +7,7 @@ from lib.rdq.svckms import KmsClient
 from lib.rdq.svcsqs import SQSClient
 from lib.rdq.svceventbridge import EventBridgeClient
 import lib.rdq.policy as policy
-from cmds.codeLoader import getTestCode
+from cmds.codeLoader import getCoreCode, getTestCode
 
 def setup_assume_role(callingAccountId):
     profile = Profile()
@@ -198,11 +198,76 @@ class TestRdq(unittest.TestCase):
         sqsc.deleteQueue(queueName)
         ebc.deleteEventBus(eventBusName)
 
+    def test_dispatcher(self):
+        cpack = 'NZISM'
+        codeZip = getCoreCode('ComplianceDispatcher')
+        profile = Profile()
+        iamc = IamClient(profile)
+        orgc = OrganizationClient(profile)
+        kmsc = KmsClient(profile)
+        lambdac = LambdaClient(profile)
+        ebc = EventBridgeClient(profile)
+        sqsc = SQSClient(profile)
+
+        sqsVisibilityTimeoutSecs = 15 * 60
+        ebTargetMaxAgeSecs = 12 * 3600
+        lambdaTimeoutSecs = 180
+        sqsPollCfg = {
+            'BatchSize': 5,
+            'MaximumBatchingWindowInSeconds': 0
+        }
+
+        sqsCmkDescription = "Encryption for SQS queued events"
+        sqsCmkAlias = "queued_events"
+        eventBusName = '{}-AutoRemediation'.format(cpack)
+        queueName = '{}-ComplianceChangeQueue'.format(cpack)
+        ruleName = 'ComplianceChange'
+        ruleDescription = "Config Rule Compliance Change"
+        eventPattern = {
+            'source': ["aws.config"],
+            'detail-type': ["Config Rules Compliance Change"]
+        }
+        lambdaRoleDescription = "{} Compliance Dispatcher Lambda Role".format(cpack)
+        lambdaRoleName = '{}-ComplianceDispatcher-LambdaRole'.format(cpack)
+        functionName = '{}-ComplianceDispatcher'.format(cpack)
+        functionDescription = '{} Compliance Dispatcher Lambda'.format(cpack)
+        functionCfg = {
+            'Runtime': 'python3.8',
+            'Handler': 'lambda_function.lambda_handler',
+            'Timeout': lambdaTimeoutSecs,
+            'MemorySize': 128
+        }
+
+        orgId = orgc.getOrganizationId()
+        ebc.declareEventBusArn(eventBusName)
+        ruleArn = ebc.declareEventBusRuleArn(eventBusName, ruleName, ruleDescription, eventPattern)
+
+        cmkStatements = [ policy.allowCMKForServiceProducer(profile, policy.serviceNamespaceSQS(), policy.principalEventBridge()) ]
+        cmkarn = kmsc.declareCMKArn(sqsCmkDescription, sqsCmkAlias, cmkStatements)
+        sqsStatements = [ policy.allowSQSForServiceProducer(profile, queueName, policy.principalEventBridge(), ruleArn) ]
+        sqsArn = sqsc.declareQueueArn(queueName, cmkarn, sqsStatements, sqsVisibilityTimeoutSecs)
+        ebc.declareEventBusTarget(eventBusName, ruleName, queueName, sqsArn, ebTargetMaxAgeSecs)
+        ebc.declareEventBusPublishPermissionForOrganization(eventBusName, orgId)
+
+        lambdaPolicyArn = iamc.declareAwsPolicyArn(policy.awsLambdaBasicExecution())
+        roleArn = iamc.declareRoleArn(lambdaRoleName, lambdaRoleDescription, policy.trustLambda())
+        iamc.declareManagedPoliciesForRole(lambdaRoleName, [lambdaPolicyArn])
+        policyMapSQS = policy.permissions([policy.allowConsumeSQS(sqsArn)])
+        iamc.declareInlinePoliciesForRole(lambdaRoleName, {'ComplianceChangeEventQueue': policyMapSQS})
+        lambdaArn = lambdac.declareFunctionArn(functionName, functionDescription, roleArn, functionCfg, codeZip)
+        lambdac.declareEventSourceMappingUUID(functionName, sqsArn, sqsPollCfg)
+
+        lambdac.deleteEventSourceMapping(functionName, sqsArn)
+        lambdac.deleteFunction(functionName)
+        iamc.deleteRole(lambdaRoleName)
+        sqsc.deleteQueue(queueName)
+        ebc.deleteEventBus(eventBusName)
+
 
 
 if __name__ == '__main__':
     loader = unittest.TestLoader()
-    loader.testMethodPrefix = "test_eventBus"
+    loader.testMethodPrefix = "test_dispatcher"
     unittest.main(warnings='default', testLoader = loader)
     # setup_assume_role('746869318262')
     # test_assume_role('119399605612')

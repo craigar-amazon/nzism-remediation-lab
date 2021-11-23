@@ -5,6 +5,17 @@ import json
 def _logerr(msg):
     logging.error(msg)
 
+def _logerrargs(*args):
+    key = ''
+    for a in args:
+        if key:
+            _logerr("{}: {}".format(key, a))
+            key = ''
+        else:
+            key = a
+    if key:
+        _logerr(key)
+
 class ServiceUtils:
     def __init__(self, profile, service, maxAttempts=10):
         self._profile = profile
@@ -65,25 +76,29 @@ class ServiceUtils:
     def diagnostic(self, op, msg):
         _logerr("Diagnostic information for {}:{}".format(self._service, op))
         _logerr(msg)
+        return msg
 
     def fail(self, e, op, entityType, entityName, *args):
-        _logerr("Unexpected error calling {}:{}".format(self._service, op))
+        erm = "Unexpected error calling {}:{}".format(self._service, op)
+        _logerr(erm)
         _logerr("AccountId: {}".format(self._profile.accountId))
         _logerr("SessionName: {}".format(self._profile.sessionName))
         if entityType and entityName:
             _logerr("{}: {}".format(entityType, entityName))
-        key = ''
-        for a in args:
-            if key:
-                _logerr("{}: {}".format(key, a))
-                key = ''
-            else:
-                key = a
-        if key:
-            _logerr(key)
+        _logerrargs(args)
         _logerr(e)
         if entityName: return "Unexpected error calling {} on {}".format(op, entityName)
-        return "Unexpected error calling {}".format(op)
+        return erm
+
+    def integrity(self, msg, *args):
+        erm = "Data integrity error detected in {}".format(self._service)
+        _logerr(erm)
+        _logerr(msg)
+        _logerr("AccountId: {}".format(self._profile.accountId))
+        _logerr("SessionName: {}".format(self._profile.sessionName))
+        _logerrargs(args)
+        return erm
+
 
     def preview(self, op, args):
         svcop = "{}:{}".format(self._service, op)

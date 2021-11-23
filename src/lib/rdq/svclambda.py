@@ -131,6 +131,75 @@ class LambdaClient:
             if self._utils.is_resource_not_found(e): return False
             raise RdqError(self._utils.fail(e, op, 'FunctionName', functionName))
 
+    def list_event_source_mappings(self, functionName, eventSourceArn):
+        op = "list_event_source_mappings"
+        try:
+            paginator = self._client.get_paginator(op)
+            page_iterator = paginator.paginate(FunctionName=functionName, EventSourceArn=eventSourceArn)
+            mappings = []
+            for page in page_iterator:
+                items = page["EventSourceMappings"]
+                for item in items:
+                    mappings.append(item)
+            return mappings
+        except botocore.exceptions.ClientError as e:
+            raise RdqError(self._utils.fail(e, op, 'FunctionName', functionName, 'EventSourceArn', eventSourceArn))
+
+    def get_event_source_mapping(self, uuid):
+        op = 'get_event_source_mapping'
+        try:
+            response = self._client.get_event_source_mapping(
+                UUID=uuid
+            )
+            return response
+        except botocore.exceptions.ClientError as e:
+            raise RdqError(self._utils.fail(e, op, 'UUID', uuid))
+
+    def find_event_source_mapping(self, functionName, eventSourceArn):
+        mappings = self.list_event_source_mappings(functionName, eventSourceArn)
+        mappingCount = len(mappings)
+        if mappingCount == 0: return None
+        if mappingCount > 1:
+            msg = "Multiple ({}) event source mappings".format(mappingCount)
+            raise RdqError(self._utils.integrity(msg, 'FunctionName', functionName, 'EventSourceArn', eventSourceArn))
+        mapping = mappings[0]
+        uuid = mapping['UUID']
+        return self.get_event_source_mapping(uuid)
+
+    def create_event_source_mapping_uuid(self, functionName, eventSourceArn, cfg):
+        op = 'create_event_source_mapping'
+        try:
+            response = self._client.create_event_source_mapping(
+                FunctionName=functionName,
+                EventSourceArn=eventSourceArn,
+                BatchSize=cfg['BatchSize'],
+                MaximumBatchingWindowInSeconds=cfg['MaximumBatchingWindowInSeconds']
+            )
+            return response['UUID']
+        except botocore.exceptions.ClientError as e:
+            raise RdqError(self._utils.fail(e, op, 'FunctionName', functionName, 'EventSourceArn', eventSourceArn))
+
+    def update_event_source_mapping(self, uuid, cfg):
+        op = 'update_event_source_mapping'
+        try:
+            self._client.update_event_source_mapping(
+                UUID=uuid,
+                BatchSize=cfg['BatchSize'],
+                MaximumBatchingWindowInSeconds=cfg['MaximumBatchingWindowInSeconds']
+            )
+        except botocore.exceptions.ClientError as e:
+            raise RdqError(self._utils.fail(e, op, 'UUID', uuid))
+
+    def delete_event_source_mapping(self, uuid):
+        op = 'delete_event_source_mapping'
+        try:
+            self._client.delete_event_source_mapping(
+                UUID=uuid
+            )
+        except botocore.exceptions.ClientError as e:
+            raise RdqError(self._utils.fail(e, op, 'UUID', uuid))
+
+
     # Allow lambda:InvokeFunction
     def invoke_function_json(self, functionName, payloadMap):
         op = 'invoke'
@@ -168,6 +237,30 @@ class LambdaClient:
 
     def deleteFunction(self, functionName):
         return self.delete_function(functionName)
+
+    def declareEventSourceMappingUUID(self, functionName, eventSourceArn, cfg):
+        exMapping = self.find_event_source_mapping(functionName, eventSourceArn)
+        if not exMapping:
+            return self.create_event_source_mapping_uuid(functionName, eventSourceArn, cfg)
+        uuid = exMapping['UUID']
+        anames = ['BatchSize', 'MaximumBatchingWindowInSeconds']
+        delta = False
+        for aname in anames:
+            rq = cfg[aname]
+            ex = exMapping[aname]
+            if rq != ex:
+                delta = True
+                break
+        if delta:
+            self.update_event_source_mapping(uuid, cfg)
+        return uuid
+
+    def deleteEventSourceMapping(self, functionName, eventSourceArn):
+        exMapping = self.find_event_source_mapping(functionName, eventSourceArn)
+        if not exMapping: return False
+        uuid = exMapping['UUID']
+        self.delete_event_source_mapping(uuid)
+        return True
 
     def invokeFunctionJson(self, functionName, payloadMap):
         return self.invoke_function_json(functionName, payloadMap)
