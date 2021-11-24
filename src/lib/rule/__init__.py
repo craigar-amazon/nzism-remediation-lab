@@ -55,7 +55,10 @@ class RuleMain:
         sessionName = self._session_name(configRuleName)
         try:
             fromProfile = Profile(regionName=awsRegion)
-            targetProfile = fromProfile.assumeRole(awsAccountId, roleName, awsRegion, sessionName)
+            if roleName == 'LOCAL':
+                targetProfile = fromProfile
+            else:
+                targetProfile = fromProfile.assumeRole(awsAccountId, roleName, awsRegion, sessionName)
             targetProfile.enablePreview(isPreview)
             context = {
                 'conformancePackName': conformancePackName
@@ -70,7 +73,7 @@ class RuleMain:
                 'remediationResponse': remediationResponse
             }
         except RdqError as e:
-            _logerr("Remedition handler for rule {} and type {} failed".format(configRuleName, resourceType))
+            _logerr("Remediation handler for rule {} and type {} failed".format(configRuleName, resourceType))
             _logerr("ResourceId: {}".format(resourceId))
             _logerr("TargetAccountId: {}".format(awsAccountId))
             _logerr("RoleName: {}".format(roleName))
@@ -91,7 +94,7 @@ class RuleMain:
         try:
             return self._remediate_imp(event)
         except RuleImplementationError as e:
-            _logerr("Remedition {} failed".format(self._remediationName))
+            _logerr("Error in rule implementation")
             _logerr(e)
             return {
                 'remediationFailure': e.message

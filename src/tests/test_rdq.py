@@ -7,7 +7,10 @@ from lib.rdq.svckms import KmsClient
 from lib.rdq.svcsqs import SQSClient
 from lib.rdq.svceventbridge import EventBridgeClient
 import lib.rdq.policy as policy
-from cmds.codeLoader import getCoreCode, getTestCode
+
+from cfg.installer import coreFunctionName, coreResourceName, coreFunctionCfg, ruleFunctionName, ruleFunctionCfg
+from cfg.roles import landingZoneRoles
+from cmds.codeLoader import getCoreCode, getTestCode, getRuleCode, getAvailableRules
 
 def setup_assume_role(callingAccountId):
     profile = Profile()
@@ -199,8 +202,6 @@ class TestRdq(unittest.TestCase):
         ebc.deleteEventBus(eventBusName)
 
     def test_dispatcher(self):
-        cpack = 'NZISM'
-        codeZip = getCoreCode('ComplianceDispatcher')
         profile = Profile()
         iamc = IamClient(profile)
         orgc = OrganizationClient(profile)
@@ -211,7 +212,6 @@ class TestRdq(unittest.TestCase):
 
         sqsVisibilityTimeoutSecs = 15 * 60
         ebTargetMaxAgeSecs = 12 * 3600
-        lambdaTimeoutSecs = 180
         sqsPollCfg = {
             'BatchSize': 5,
             'MaximumBatchingWindowInSeconds': 0
@@ -219,24 +219,21 @@ class TestRdq(unittest.TestCase):
 
         sqsCmkDescription = "Encryption for SQS queued events"
         sqsCmkAlias = "queued_events"
-        eventBusName = '{}-AutoRemediation'.format(cpack)
-        queueName = '{}-ComplianceChangeQueue'.format(cpack)
+        eventBusName = coreResourceName('AutoRemediation')
+        queueName = coreResourceName('ComplianceChangeQueue')
         ruleName = 'ComplianceChange'
         ruleDescription = "Config Rule Compliance Change"
         eventPattern = {
             'source': ["aws.config"],
             'detail-type': ["Config Rules Compliance Change"]
         }
-        lambdaRoleDescription = "{} Compliance Dispatcher Lambda Role".format(cpack)
-        lambdaRoleName = '{}-ComplianceDispatcher-LambdaRole'.format(cpack)
-        functionName = '{}-ComplianceDispatcher'.format(cpack)
-        functionDescription = '{} Compliance Dispatcher Lambda'.format(cpack)
-        functionCfg = {
-            'Runtime': 'python3.8',
-            'Handler': 'lambda_function.lambda_handler',
-            'Timeout': lambdaTimeoutSecs,
-            'MemorySize': 128
-        }
+        codeFolder = 'ComplianceDispatcher'
+        codeZip = getCoreCode(codeFolder)
+        lambdaRoleDescription = "Compliance Dispatcher Lambda Role"
+        lambdaRoleName = coreResourceName('ComplianceDispatcher-LambdaRole')
+        functionName = coreFunctionName(codeFolder)
+        functionDescription = 'Compliance Dispatcher Lambda'
+        functionCfg = coreFunctionCfg()
 
         orgId = orgc.getOrganizationId()
         ebc.declareEventBusArn(eventBusName)
@@ -252,17 +249,36 @@ class TestRdq(unittest.TestCase):
         lambdaPolicyArn = iamc.declareAwsPolicyArn(policy.awsLambdaBasicExecution())
         roleArn = iamc.declareRoleArn(lambdaRoleName, lambdaRoleDescription, policy.trustLambda())
         iamc.declareManagedPoliciesForRole(lambdaRoleName, [lambdaPolicyArn])
-        policyMapSQS = policy.permissions([policy.allowConsumeSQS(sqsArn)])
-        iamc.declareInlinePoliciesForRole(lambdaRoleName, {'ComplianceChangeEventQueue': policyMapSQS})
+        policyMapSQS = policy.permissions([policy.allowConsumeSQS(sqsArn), policy.allowDecryptCMK(cmkarn)])
+        remediationLambdaNamePattern = "function:{}".format(ruleFunctionName("*"))
+        remediationLambdaArn = profile.getRegionAccountArn('lambda', remediationLambdaNamePattern)
+        policyMapInvoke = policy.permissions([policy.allowInvokeLambda(remediationLambdaArn)])
+        policyMapDiscover = policy.permissions([policy.allowDescribeIam("*")])
+        inlinePolicyMap = {"ConsumeQueue": policyMapSQS, "InvokeRemediations": policyMapInvoke, "DiscoverRoles": policyMapDiscover}
+        iamc.declareInlinePoliciesForRole(lambdaRoleName, inlinePolicyMap)
         lambdaArn = lambdac.declareFunctionArn(functionName, functionDescription, roleArn, functionCfg, codeZip)
         lambdac.declareEventSourceMappingUUID(functionName, sqsArn, sqsPollCfg)
+
+        ruleFolders = getAvailableRules()
+        rFunctionCfg = ruleFunctionCfg()
+        lzRoles = landingZoneRoles()
+
+        rRoleName =  lzRoles['ControlTower']['Audit']
+        rRole = iamc.getRole(rRoleName)
+        self.assertIsNotNone(rRole)
+        rRoleArn = rRole['Arn']
+        for ruleFolder in ruleFolders:
+            rZip = getRuleCode(ruleFolder)
+            rFunctionName = ruleFunctionName(ruleFolder)
+            rFunctionDescription = '{} Auto Remediation Lambda'.format(ruleFolder)
+            rLambdaArn = lambdac.declareFunctionArn(rFunctionName, rFunctionDescription, rRoleArn, rFunctionCfg, rZip)
+
 
         lambdac.deleteEventSourceMapping(functionName, sqsArn)
         lambdac.deleteFunction(functionName)
         iamc.deleteRole(lambdaRoleName)
         sqsc.deleteQueue(queueName)
         ebc.deleteEventBus(eventBusName)
-
 
 
 if __name__ == '__main__':

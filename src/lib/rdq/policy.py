@@ -29,6 +29,7 @@ def trustService(servicePrincipalName):
             }
         ]
     }
+
 def trustAccount(accountId):
     return {
         'Version': "2012-10-17",
@@ -49,7 +50,7 @@ def permissions(statements):
         'Statement': statements
     }
 
-def allowConsumeSQS(queueArn, sid='ConsumeSQS'):
+def allowConsumeSQS(queueArn, sid="ConsumeSQS"):
     return {
         'Sid': sid,
         'Effect': "Allow",
@@ -60,6 +61,38 @@ def allowConsumeSQS(queueArn, sid='ConsumeSQS'):
         ],
         'Resource': queueArn
     }
+
+def allowDecryptCMK(cmkArn, sid="DecryptCMK"):
+    return {
+        'Sid': sid,
+        'Effect': "Allow",
+        'Action': [
+            "kms:Decrypt"
+        ],
+        'Resource': cmkArn
+    }
+
+def allowInvokeLambda(lambdaArn, sid="InvokeLambda"):
+    return {
+        'Sid': sid,
+        'Effect': "Allow",
+        'Action': [
+            "lambda:InvokeFunction"
+        ],
+        'Resource': lambdaArn
+    }
+
+def allowDescribeIam(roleArn, sid="DescribeIam"):
+    return {
+        'Sid': sid,
+        'Effect': "Allow",
+        'Action': [
+            "iam:GetRole"
+        ],
+        'Resource': roleArn
+    }
+
+
 
 def allowCMKForServiceProducer(profile, storageServiceNamespace, producerServicePrincipal):
     sid = "Producer service " + producerServicePrincipal + " for " + storageServiceNamespace

@@ -145,6 +145,20 @@ class LambdaClient:
         except botocore.exceptions.ClientError as e:
             raise RdqError(self._utils.fail(e, op, 'FunctionName', functionName, 'EventSourceArn', eventSourceArn))
 
+    def list_event_source_mappings_all(self, functionName):
+        op = "list_event_source_mappings"
+        try:
+            paginator = self._client.get_paginator(op)
+            page_iterator = paginator.paginate(FunctionName=functionName)
+            mappings = []
+            for page in page_iterator:
+                items = page["EventSourceMappings"]
+                for item in items:
+                    mappings.append(item)
+            return mappings
+        except botocore.exceptions.ClientError as e:
+            raise RdqError(self._utils.fail(e, op, 'FunctionName', functionName))
+
     def get_event_source_mapping(self, uuid):
         op = 'get_event_source_mapping'
         try:
@@ -173,7 +187,8 @@ class LambdaClient:
                 FunctionName=functionName,
                 EventSourceArn=eventSourceArn,
                 BatchSize=cfg['BatchSize'],
-                MaximumBatchingWindowInSeconds=cfg['MaximumBatchingWindowInSeconds']
+                MaximumBatchingWindowInSeconds=cfg['MaximumBatchingWindowInSeconds'],
+                Enabled=True
             )
             return response['UUID']
         except botocore.exceptions.ClientError as e:
@@ -189,6 +204,21 @@ class LambdaClient:
             )
         except botocore.exceptions.ClientError as e:
             raise RdqError(self._utils.fail(e, op, 'UUID', uuid))
+
+    def enable_event_source_mapping_for_uuid(self, uuid, enabled):
+        op = 'update_event_source_mapping'
+        try:
+            self._client.update_event_source_mapping(
+                UUID=uuid,
+                Enabled=enabled
+            )
+        except botocore.exceptions.ClientError as e:
+            raise RdqError(self._utils.fail(e, op, 'UUID', uuid))
+
+    def enable_event_source_mappings(self, mappings, enabled):
+        for mapping in mappings:
+            uuid = mapping['UUID']
+            self.enable_event_source_mapping_for_uuid(uuid, enabled)
 
     def delete_event_source_mapping(self, uuid):
         op = 'delete_event_source_mapping'
@@ -226,8 +256,11 @@ class LambdaClient:
         if not exFunction:
             newFunction = self.create_function(functionName, functionDescription, roleArn, cfg, codeZip)
             return newFunction['FunctionArn']
-        self.update_function_configuration(functionName, functionDescription, roleArn, cfg)
+        mappings = self.list_event_source_mappings_all(functionName)
+        self.enable_event_source_mappings(mappings, False)
+        # self.update_function_configuration(functionName, functionDescription, roleArn, cfg)
         self.update_function_code(functionName, codeZip)
+        self.enable_event_source_mappings(mappings, True)
         return exFunction['Configuration']['FunctionArn']
 
     def declareInvokePermission(self, functionArn, sid, principal, sourceArn):

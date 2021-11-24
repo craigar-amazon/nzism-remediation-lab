@@ -4,11 +4,23 @@ import os
 from zipfile import ZipFile
 from zipfile import ZIP_STORED
 
-from cfg import codeConfig
+from cfg.installer import folderConfig
+
+class CodePathError(Exception):
+    def __init__(self, message):
+        self._message = message
+
+    def __str__(self):
+        return self._message
+    
+    @property
+    def message(self):
+        return self._message
+
 
 def requiredProp(cfg, key):
     if key in cfg: return cfg[key]
-    raise Exception("Missing required configuration property %s" % key)
+    raise CodePathError("Missing required configuration property %s" % key)
 
 def get_all_file_pairs(base_path, home_path):
     file_pairs = []
@@ -32,49 +44,68 @@ def bytes_file(file_path):
     f.close()
     return byte_array
 
-def get_zip_code_bytes(functionName, mainBase, mainPath, libBase, libPaths):
+def get_zip_code_bytes(functionName, mainBase, mainPath, auxBase, auxPaths):
     zipFilePath = os.path.join(tempfile.gettempdir(), functionName+".zip")
     aggregateFilePairs = []
     main_pairs = get_all_file_pairs(mainBase, mainPath)
     if len(main_pairs) == 0:
         realMainPath = os.path.realpath(mainPath)
-        raise Exception("No code files found for {} on path {}".format(functionName, realMainPath))
+        raise CodePathError("No code files found for {} on path {}".format(functionName, realMainPath))
     aggregateFilePairs.extend(main_pairs)
-    for libPath in libPaths:
-        lib_pairs = get_all_file_pairs(libBase, libPath)
-        aggregateFilePairs.extend(lib_pairs)
+    for auxPath in auxPaths:
+        aux_pairs = get_all_file_pairs(auxBase, auxPath)
+        aggregateFilePairs.extend(aux_pairs)
     make_zip_file(zipFilePath, aggregateFilePairs)
     return bytes_file(zipFilePath)
 
-def get_lambda_code_bytes(baseFunctionName, libs, typeFolder):
-    codeCfg = codeConfig()
-    codeHome = requiredProp(codeCfg, 'CodeHome')
-    lambdaFolder = requiredProp(codeCfg, 'LambdaFolder')
-    libFolder = requiredProp(codeCfg, 'LibFolder')
+def get_lambda_code_bytes(baseFunctionName, libs, includeCfg, typeFolder):
+    folderCfg = folderConfig()
+    codeHome = requiredProp(folderCfg, 'CodeHome')
+    lambdaFolder = requiredProp(folderCfg, 'LambdaFolder')
+    libFolder = requiredProp(folderCfg, 'LibFolder')
+    cfgFolder = requiredProp(folderCfg, 'CfgFolder')
     mainCodePath = os.path.join(codeHome, lambdaFolder, typeFolder, baseFunctionName)
     mainCodeBase = mainCodePath
-    libBase = codeHome
-    libPaths = []
+    auxPaths = []
     for lib in libs:
         libPath = os.path.join(codeHome, libFolder, lib)
-        libPaths.append(libPath)
-    return get_zip_code_bytes(baseFunctionName, mainCodeBase, mainCodePath, libBase, libPaths)
+        auxPaths.append(libPath)
+    if includeCfg:
+        cfgPath = os.path.join(codeHome, cfgFolder)
+        auxPaths.append(cfgPath)
+    return get_zip_code_bytes(baseFunctionName, mainCodeBase, mainCodePath, codeHome, auxPaths)
 
+def getAvailableRules():
+    folderCfg = folderConfig()
+    codeHome = requiredProp(folderCfg, 'CodeHome')
+    lambdaFolder = requiredProp(folderCfg, 'LambdaFolder')
+    typeFolder = requiredProp(folderCfg, 'RulesFolder')
+    ruleMain = requiredProp(folderCfg, 'RuleMain')
+    searchPath = os.path.join(codeHome, lambdaFolder, typeFolder)
+    ruleNames = []
+    for (root, dirnames, files) in os.walk(searchPath):
+        for filename in files:
+            if filename == ruleMain:
+                (rhead, rtail) = os.path.split(root)
+                if rtail:
+                    ruleNames.append(rtail)
+    return ruleNames    
 
 def getCoreCode(baseFunctionName):
-    libs = ['rdq']
+    libs = ['rdq', 'core']
+    includeCfg = True
     typeFolder = 'core'
-    return get_lambda_code_bytes(baseFunctionName, libs, typeFolder)
+    return get_lambda_code_bytes(baseFunctionName, libs, includeCfg, typeFolder)
 
 def getRuleCode(baseFunctionName):
     libs = ['rdq', 'rule']
-    codeCfg = codeConfig()
-    typeFolder = requiredProp(codeCfg, 'RulesFolder')
-    return get_lambda_code_bytes(baseFunctionName, libs, typeFolder)
+    includeCfg = False
+    folderCfg = folderConfig()
+    typeFolder = requiredProp(folderCfg, 'RulesFolder')
+    return get_lambda_code_bytes(baseFunctionName, libs, includeCfg, typeFolder)
 
 def getTestCode(baseFunctionName):
     libs = ['rdq', 'rule']
+    includeCfg = True
     typeFolder = 'test'
-    return get_lambda_code_bytes(baseFunctionName, libs, typeFolder)
-
-
+    return get_lambda_code_bytes(baseFunctionName, libs, includeCfg, typeFolder)
