@@ -1,7 +1,14 @@
+import hashlib
+import base64
 import botocore
 
 from lib.rdq import RdqError
 from .base import ServiceUtils
+
+def _codeSha256(codeZip):
+    hash = hashlib.sha256()
+    hash.update(codeZip)
+    return base64.b64encode(hash.digest()).decode()
 
 class LambdaClient:
     def __init__(self, profile, maxAttempts=10):
@@ -281,11 +288,17 @@ class LambdaClient:
             newFunction = self.create_function(functionName, functionDescription, roleArn, cfg, codeZip)
             self.get_function_nonpending(functionName)
             return newFunction['FunctionArn']
+        exFunctionConfiguration = exFunction['Configuration']
         self.update_function_configuration(functionName, functionDescription, roleArn, cfg)
         self.get_function_nonpending(functionName)
-        self.update_function_code(functionName, codeZip)
-        self.get_function_nonpending(functionName)
-        return exFunction['Configuration']['FunctionArn']
+        exCodeSha256 = exFunctionConfiguration['CodeSha256']
+        inCodeSha256 = _codeSha256(codeZip)
+        if inCodeSha256 == exCodeSha256:
+            self._utils.info('CheckCodeSHA256', 'FunctionName', functionName, "Code unchanged", "codeSHA256", exCodeSha256)
+        else:
+            self.update_function_code(functionName, codeZip)
+            self.get_function_nonpending(functionName)
+        return exFunctionConfiguration['FunctionArn']
 
     def declareInvokePermission(self, functionArn, sid, principal, sourceArn):
         action = "lambda:InvokeFunction"

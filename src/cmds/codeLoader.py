@@ -55,7 +55,8 @@ def get_zip_code_bytes(functionName, mainBase, mainPath, auxBase, auxPaths):
     for auxPath in auxPaths:
         aux_pairs = get_all_file_pairs(auxBase, auxPath)
         aggregateFilePairs.extend(aux_pairs)
-    make_zip_file(zipFilePath, aggregateFilePairs)
+    sortedFilePairs = sorted(aggregateFilePairs, key=(lambda pair: pair['src']))
+    make_zip_file(zipFilePath, sortedFilePairs)
     return bytes_file(zipFilePath)
 
 def get_lambda_code_bytes(baseFunctionName, libs, includeCfg, typeFolder):
