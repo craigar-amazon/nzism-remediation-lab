@@ -22,10 +22,26 @@ class LambdaClient:
             if self._utils.is_resource_not_found(e): return None
             raise RdqError(self._utils.fail(e, op, 'FunctionName', functionName))
 
+    def get_function_nonpending(self, functionName):
+        op = "WaitForStateTransition"
+        tracker = self._utils.init_tracker(op)
+        while True:
+            exFunction = self.get_function(functionName)
+            if not exFunction: return None
+            fc = exFunction['Configuration']
+            state = fc['State']
+            lastUpdateStatus = fc['LastUpdateStatus']
+            self._utils.info(op, 'FunctionName', functionName, "Checking function state", "State", state, "LastUpdateStatus", lastUpdateStatus)
+            retry = (state == 'Pending') or (lastUpdateStatus == 'InProgress')
+            if not retry: return exFunction
+            if self._utils.retry(tracker):
+                tracker = self._utils.backoff(tracker)
+
+
     # Allow lambda:CreateFunction
     def create_function(self, functionName, functionDescription, roleArn, cfg, codeZip):
         op = 'create_function'
-        tracker = self._utils.init_tracker()
+        tracker = self._utils.init_tracker(op)
         while True:
             try:
                 response = self._client.create_function(
@@ -50,7 +66,7 @@ class LambdaClient:
     # Allow lambda:UpdateFunctionConfiguration
     def update_function_configuration(self, functionName, functionDescription, roleArn, cfg):
         op = 'update_function_configuration'
-        tracker = self._utils.init_tracker()
+        tracker = self._utils.init_tracker(op)
         while True:
             try:
                 response = self._client.update_function_configuration(
@@ -67,19 +83,27 @@ class LambdaClient:
                 if self._utils.retry_propagation_delay(e, tracker):
                     tracker = self._utils.backoff(tracker)
                     continue
+                if self._utils.retry_resource_conflict(e, tracker):
+                    tracker = self._utils.backoff(tracker)
+                    continue
                 raise RdqError(self._utils.fail(e, op, 'FunctionName', functionName, 'RoleArn', roleArn, 'Tracker', tracker))
 
     # Allow lambda:UpdateFunctionCode
     def update_function_code(self, functionName, codeZip):
         op = 'update_function_code'
-        try:
-            response = self._client.update_function_code(
-                FunctionName=functionName,
-                ZipFile=codeZip
-            )
-            return response
-        except botocore.exceptions.ClientError as e:
-            raise RdqError(self._utils.fail(e, op, 'FunctionName', functionName))
+        tracker = self._utils.init_tracker(op)
+        while True:
+            try:
+                response = self._client.update_function_code(
+                    FunctionName=functionName,
+                    ZipFile=codeZip
+                )
+                return response
+            except botocore.exceptions.ClientError as e:
+                if self._utils.retry_resource_conflict(e, tracker):
+                    tracker = self._utils.backoff(tracker)
+                    continue
+                raise RdqError(self._utils.fail(e, op, 'FunctionName', functionName))
 
 
     def get_policy(self, functionArn):
@@ -255,12 +279,12 @@ class LambdaClient:
         exFunction = self.get_function(functionName)
         if not exFunction:
             newFunction = self.create_function(functionName, functionDescription, roleArn, cfg, codeZip)
+            self.get_function_nonpending(functionName)
             return newFunction['FunctionArn']
-        mappings = self.list_event_source_mappings_all(functionName)
-        self.enable_event_source_mappings(mappings, False)
-        # self.update_function_configuration(functionName, functionDescription, roleArn, cfg)
+        self.update_function_configuration(functionName, functionDescription, roleArn, cfg)
+        self.get_function_nonpending(functionName)
         self.update_function_code(functionName, codeZip)
-        self.enable_event_source_mappings(mappings, True)
+        self.get_function_nonpending(functionName)
         return exFunction['Configuration']['FunctionArn']
 
     def declareInvokePermission(self, functionArn, sid, principal, sourceArn):
@@ -287,6 +311,10 @@ class LambdaClient:
         if delta:
             self.update_event_source_mapping(uuid, cfg)
         return uuid
+
+    def enableEventSourceMappingsForFunction(self, functionName, isEnabled):
+        mappings = self.list_event_source_mappings_all(functionName)
+        self.enable_event_source_mappings(mappings, isEnabled)
 
     def deleteEventSourceMapping(self, functionName, eventSourceArn):
         exMapping = self.find_event_source_mapping(functionName, eventSourceArn)

@@ -92,20 +92,20 @@ def getAvailableRules():
     return ruleNames    
 
 def getCoreCode(baseFunctionName):
-    libs = ['rdq', 'core']
+    libs = ['base', 'rdq', 'core']
     includeCfg = True
     typeFolder = 'core'
     return get_lambda_code_bytes(baseFunctionName, libs, includeCfg, typeFolder)
 
 def getRuleCode(baseFunctionName):
-    libs = ['rdq', 'rule']
+    libs = ['base', 'rdq', 'rule']
     includeCfg = False
     folderCfg = folderConfig()
     typeFolder = requiredProp(folderCfg, 'RulesFolder')
     return get_lambda_code_bytes(baseFunctionName, libs, includeCfg, typeFolder)
 
 def getTestCode(baseFunctionName):
-    libs = ['rdq', 'rule']
+    libs = ['base', 'rdq', 'rule']
     includeCfg = True
     typeFolder = 'test'
     return get_lambda_code_bytes(baseFunctionName, libs, includeCfg, typeFolder)

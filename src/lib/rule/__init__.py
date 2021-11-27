@@ -1,8 +1,8 @@
 import logging
+
+from lib.base import initLogging
 from lib.rdq import Profile, RdqError
 
-def _logerr(msg):
-    logging.error(msg)
 
 class RuleImplementationError(Exception):
     def __init__(self, message):
@@ -26,7 +26,8 @@ def _required_value(src, propName, defValue=None):
     raise RuleImplementationError(erm)
 
 class RuleMain:
-    def __init__(self):
+    def __init__(self, logLevelVariable='LOGLEVEL', defaultLevel='INFO'):
+        initLogging(logLevelVariable, defaultLevel)
         self._handlers = []
     
     def _select_handling_method(self, configRuleName, resourceType):
@@ -73,11 +74,14 @@ class RuleMain:
                 'remediationResponse': remediationResponse
             }
         except RdqError as e:
-            _logerr("Remediation handler for rule {} and type {} failed".format(configRuleName, resourceType))
-            _logerr("ResourceId: {}".format(resourceId))
-            _logerr("TargetAccountId: {}".format(awsAccountId))
-            _logerr("RoleName: {}".format(roleName))
-            _logerr(e)
+            ectx = {
+                "configRuleName": configRuleName,
+                "resourceType": resourceType,
+                "resourceId": resourceId,
+                "targetAccountId": awsAccountId,
+                "roleName": roleName
+            }
+            logging.error("RdqError in remediation handler. | Cause: %s | Context: %s", e.message, ectx)
             return {
                 'remediationFailure': e.message
             }
@@ -94,8 +98,7 @@ class RuleMain:
         try:
             return self._remediate_imp(event)
         except RuleImplementationError as e:
-            _logerr("Error in rule implementation")
-            _logerr(e)
+            logging.error("RuleImplementationError in remediation main. | Cause: %s | Event: %s", e.message, event)
             return {
                 'remediationFailure': e.message
             }

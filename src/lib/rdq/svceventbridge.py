@@ -209,6 +209,16 @@ class EventBridgeClient:
             self.put_targets(eventBusName, ruleName, [reqdTarget])
         return delta
 
+    def declareEventBusPublishPermissionForAccount(self, eventBusName, accountId):
+        sid = "pub-{}".format(accountId)
+        action = 'events:PutEvents'
+        condition = {
+                'Type': 'StringEquals',
+                'Key': 'aws:PrincipalAccount',
+                'Value': accountId
+        }
+        self.put_permission(eventBusName, sid, action, condition)
+
     def declareEventBusPublishPermissionForOrganization(self, eventBusName, organizationId):
         sid = "pub-{}".format(organizationId)
         action = 'events:PutEvents'

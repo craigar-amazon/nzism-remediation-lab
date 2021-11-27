@@ -1,6 +1,9 @@
 
+
+# Specify empty array for single-account mode
+# Specifying multiple members will initiate iam:GetRole discovery
 def landingZoneSearch():
-    return ['ControlTower', 'AutomatedLandingZone', 'LOCAL']
+    return ['ControlTower', 'AutomatedLandingZone']
 
 def landingZoneRoles():
     return {

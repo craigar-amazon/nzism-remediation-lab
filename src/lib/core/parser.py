@@ -1,21 +1,11 @@
 import logging
 import json
 
-from lib.rdq.svciam import IamClient
-
 import cfg.installer as cfginstall
-import cfg.roles as cfgroles
 import cfg.rules as cfgrules
 
-from lib.core import RetryError
-
-def select_config(src, context, aname):
-    if not (aname in src):
-        msg = "Attribute '{}' is missing from configuration. Context is '{}'".format(aname, context)
-        logging.warning(msg)
-        raise RetryError(msg)
-    return src[aname]
-
+from lib.core import ConfigError
+import lib.core.discover as discover
 
 def has_expected_attribute(src, id, aname, expected):
     if not (aname in src):
@@ -90,32 +80,10 @@ def create_dispatch(record):
     dispatch = extract_dispatch(messageId, body)
     if not dispatch: return None
 
-    logging.info(json.dumps(dispatch))
+    logging.info("Dispatch: %s", dispatch)
     complianceType = dispatch['complianceType']
     if complianceType == 'NON_COMPLIANT':
         return dispatch
-    return None
-
-def discover_landing_zone(profile):
-    iamc = IamClient(profile)
-    lzsearch = cfgroles.landingZoneSearch()
-    lzroles = cfgroles.landingZoneRoles()
-    for lz in lzsearch:
-        if lz == 'LOCAL':
-            break
-        if lz in lzroles:
-            lzcfg = lzroles[lz]
-            auditRoleName = select_config(lzcfg, lz, 'Audit')
-            remediationRoleName = select_config(lzcfg, lz, 'Remediation')
-            exRole = iamc.getRole(auditRoleName)
-            if exRole:
-                return {
-                    'LandingZone': lz,
-                    'AuditRole': auditRoleName,
-                    'RemediationRoleName': remediationRoleName
-                }
-        else:
-            logging.warning("Missing configuration for '{}' landing zone".format(lz))
     return None
 
 
@@ -134,7 +102,7 @@ def createInvokeList(profile, dispatchList):
     configRuleMap = cfgrules.configRuleMapping()
     previewRuleList = cfgrules.previewRules()
     previewRuleSet = set(previewRuleList)
-    landingZone = discover_landing_zone(profile)
+    optLandingZone = discover.discoverLandingZone(profile)
     functionCallList = []
     for dispatch in dispatchList:
         configRuleName = dispatch['configRuleNameBase']
@@ -142,22 +110,22 @@ def createInvokeList(profile, dispatchList):
         if configRuleName in configRuleMap:
             ruleCodeFolder = configRuleMap[configRuleName]
         if not ruleCodeFolder:
-            logging.info("No auto remediation for {}".format(configRuleName))
+            logging.info("No auto remediation defined for rule %s", configRuleName)
             continue
         functionName = cfginstall.ruleFunctionName(ruleCodeFolder)
         targetAccountId = dispatch['awsAccountId']
         isPreview = configRuleName in previewRuleSet
         isLocalAccount = profile.accountId == targetAccountId
         targetRole = None
-        if landingZone:
-            targetRole = landingZone['RemediationRoleName']
+        if optLandingZone:
+            targetRole = optLandingZone['RemediationRoleName']
         else:
             if isLocalAccount:
                 targetRole = 'LOCAL'
         if not targetRole:
-            erm = "Cannot remediate account '{}' without a remdiation role".format(targetAccountId)
+            erm = "Cannot remediate account {} without a remediation role".format(targetAccountId)
             logging.error(erm)
-            raise RetryError(erm)
+            raise ConfigError(erm)
         awsRegion = dispatch['awsRegion']
         resourceType = dispatch['resourceType']
         resourceId = dispatch['resourceId']

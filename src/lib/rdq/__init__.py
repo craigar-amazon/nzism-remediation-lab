@@ -2,9 +2,6 @@ import logging
 import botocore
 import boto3
 
-def _logerr(msg):
-    logging.error(msg)
-
 def _role_arn(accountId, roleName):
     return "arn:aws:iam::{}:role/{}".format(accountId, roleName)
 
@@ -28,6 +25,7 @@ class Profile:
                 session = boto3.Session(region_name=regionName)
             else:
                 session = boto3.Session()
+        op = "sts:get_caller_identity"
         try:
             sts_client = session.client('sts')
             r = sts_client.get_caller_identity()
@@ -40,12 +38,13 @@ class Profile:
             self._sessionName = sessionName if sessionName else "Initial"
             self._isPreviewing = False
             self._previewLog = []
+        except botocore.exceptions.NoCredentialsError as e:
+            raise RdqError("Unable to locate credentials")
         except botocore.exceptions.ClientError as e:
             erc = e.response['Error']['Code'] 
             if erc == 'ExpiredToken':
                 raise RdqError("Your credentials have expired")
-            _logerr("Unexpected error calling sts.get_caller_identity")
-            _logerr(e)
+            logging.error("botocore ClientError | Cause: %s | Api: %s | Detail %s", erc, op, e)
             raise RdqError("Your credentials are invalid")
     
     @property
@@ -77,6 +76,7 @@ class Profile:
 
     def assumeRole(self, accountId, roleName, regionName, sessionName, durationSecs=3600):
         roleArn = _role_arn(accountId, roleName)
+        op = "sts:assume_role"
         try:
             sts_client = self._session.client('sts')
             response = sts_client.assume_role(
@@ -94,15 +94,17 @@ class Profile:
             newProfile = Profile(newSession, roleName, sessionName)
             return newProfile
         except botocore.exceptions.ClientError as e:
-            _logerr("Unexpected error calling sts.assume_role")
-            _logerr("TargetRoleArn: {}".format(roleArn))
-            _logerr("TargetSessionName: {}".format(sessionName))
-            _logerr("TargetRegionName: {}".format(regionName))
-            _logerr('FromAccount: {}'.format(self._accountId))
-            _logerr('FromRoleName: {}'.format(self._roleName))
-            _logerr('FromSessionName: {}'.format(self._sessionName))
-            _logerr('FromRegionName: {}'.format(self._regionName))
-            _logerr(e)
+            erc = e.response['Error']['Code'] 
+            ectx = {
+                'TargetRoleArn': roleArn,
+                'TargetSessionName': sessionName,
+                'TargetRegionName': regionName,
+                'FromAccount': self._accountId,
+                'FromRoleName': self._roleName,
+                'FromSessionName': self._sessionName,
+                'FromRegionName': self._regionName
+            }
+            logging.error("botocore ClientError | Cause: %s | Api: %s | Context: %s | Detail %s", erc, op, ectx, e)
             erm = "Role {} Account {} could not assume role {}".format(self._roleName, self._accountId, roleArn)
             raise RdqError(erm)
 

@@ -12,8 +12,8 @@ class OrganizationClient:
 
     def diagnosticDelegated(self, op):
         accountId = self._profile.accountId
-        msg = "Ensure account {} is delegated administrator".format(accountId)
-        self._utils.diagnostic(op, msg)
+        msg = "Ensure account is delegated administrator"
+        self._utils.warning(op, "Account", accountId, msg)
 
 
     def describe_organization(self):

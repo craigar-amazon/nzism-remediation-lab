@@ -9,7 +9,7 @@
             "type": "python",
             "request": "launch",
             "program": "${file}",
-            "env": { "PYTHONPATH": "${workspaceRoot}/src", "AWS_DEFAULT_REGION": "ap-southeast-2"},
+            "env": { "PYTHONPATH": "${workspaceRoot}/src", "AWS_DEFAULT_REGION": "ap-southeast-2","LOGLEVEL": "DEBUG"},
             "console": "integratedTerminal"
         },
         {

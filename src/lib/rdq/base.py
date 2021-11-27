@@ -2,19 +2,18 @@ import logging
 import time
 import json
 
-def _logerr(msg):
-    logging.error(msg)
-
-def _logerrargs(*args):
+def _args_to_map(args):
+    map = {}
     key = ''
     for a in args:
         if key:
-            _logerr("{}: {}".format(key, a))
+            map[key] = a
             key = ''
         else:
             key = a
     if key:
-        _logerr(key)
+        map[key] = True
+    return map
 
 class ServiceUtils:
     def __init__(self, profile, service, maxAttempts=10):
@@ -22,6 +21,9 @@ class ServiceUtils:
         self._service = service
         self._maxAttempts = maxAttempts
     
+    def service_op(self, op):
+        return "{}:{}".format(self._service, op)
+
     def is_resource_not_found(self, e):
         erc = e.response['Error']['Code']
         svc = self._service
@@ -38,8 +40,13 @@ class ServiceUtils:
         isRoleRelated = erm.find('role') >= 0
         return (erc == 'InvalidParameterValueException') and isRoleRelated
 
-    def init_tracker(self):
-        return {'waitSecs': 1, 'attempt': 1}
+    def is_resource_conflict(self, e):
+        erc = e.response['Error']['Code']
+        return (erc == 'ResourceConflictException')
+
+    def init_tracker(self, op):
+        sop = self.service_op(op)
+        return {'waitSecs': 1, 'attempt': 1, 'op': sop}
     
     def retry(self, tracker):
         return tracker['attempt'] < self._maxAttempts
@@ -47,11 +54,21 @@ class ServiceUtils:
     def backoff(self, tracker):
         waitSecs = tracker['waitSecs']
         attempt = tracker['attempt']
+        logging.info("Will retry rdq operation after backoff interval | Tracker: %s", tracker)
         time.sleep(waitSecs)
         return {'waitSecs': (waitSecs * 2), 'attempt': (attempt + 1)}
 
     def retry_propagation_delay(self, e, tracker):
-        return self.retry(tracker) and self.is_role_propagation_delay(e)
+        canRetry = self.retry(tracker) and self.is_role_propagation_delay(e)
+        if canRetry:
+            logging.info("Retry possible after suspected role propagation error | Detail: %s", e)
+        return canRetry
+
+    def retry_resource_conflict(self, e, tracker):
+        canRetry = self.retry(tracker) and self.is_resource_conflict(e)
+        if canRetry:
+            logging.info("Retry possible after resource conflict error | Detail: %s", e)
+        return canRetry
 
     def sleep(self, waitSecs):
         time.sleep(waitSecs)
@@ -73,35 +90,48 @@ class ServiceUtils:
             'Statement': statements
         }
 
-    def diagnostic(self, op, msg):
-        _logerr("Diagnostic information for {}:{}".format(self._service, op))
-        _logerr(msg)
+    def info(self, op, argType, argValue, msg, *args):
+        sop = self.service_op(op)
+        argmap = _args_to_map(args)
+        logging.info("%s - %s: %s | Context: %s | Service: %s", msg, argType, argValue, argmap, sop)
         return msg
 
-    def fail(self, e, op, entityType, entityName, *args):
-        erm = "Unexpected error calling {}:{}".format(self._service, op)
-        _logerr(erm)
-        _logerr("AccountId: {}".format(self._profile.accountId))
-        _logerr("SessionName: {}".format(self._profile.sessionName))
-        if entityType and entityName:
-            _logerr("{}: {}".format(entityType, entityName))
-        _logerrargs(args)
-        _logerr(e)
-        if entityName: return "Unexpected error calling {} on {}".format(op, entityName)
+    def warning(self, op, argType, argValue, msg, *args):
+        sop = self.service_op(op)
+        argmap = _args_to_map(args)
+        ec = { argType: argValue }
+        if argmap: ec['Arguments'] = argmap
+        logging.warning("%s | Service: %s | Context: %s ", msg, sop, ec)
+        return msg
+
+    def fail(self, e, op, argType, argValue, *args):
+        sop = self.service_op(op)
+        argmap = _args_to_map(args)
+        ec = { argType: argValue }
+        if argmap: ec['Arguments'] = argmap
+        ec['AccountId'] = self._profile.accountId,
+        ec['SessionName'] = self._profile.sessionName
+        logging.error("%s client error | Context: %s | Detail: %s", sop, ec, e)
+        if argValue:
+            erm = "{} client error for {}: `{}`".format(sop, argType, argValue)
+        else:
+            erm = "{} client error".format(sop)
         return erm
 
     def integrity(self, msg, *args):
-        erm = "Data integrity error detected in {}".format(self._service)
-        _logerr(erm)
-        _logerr(msg)
-        _logerr("AccountId: {}".format(self._profile.accountId))
-        _logerr("SessionName: {}".format(self._profile.sessionName))
-        _logerrargs(args)
+        svc = self._service
+        argmap = _args_to_map(args)
+        ec = {}
+        if argmap: ec['Arguments'] = argmap
+        ec['AccountId'] = self._profile.accountId,
+        ec['SessionName'] = self._profile.sessionName
+        logging.error("%s data integrity error | Cause: %s | Context: %s", svc, msg, ec)
+        erm = "{} integrity error: {}".format(svc, msg)
         return erm
 
 
     def preview(self, op, args):
-        svcop = "{}:{}".format(self._service, op)
-        return self._profile.preview(svcop, args)
+        sop = self.service_op(op)
+        return self._profile.preview(sop, args)
 
 

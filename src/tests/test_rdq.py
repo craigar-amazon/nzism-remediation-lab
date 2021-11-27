@@ -1,4 +1,5 @@
 import unittest
+from lib.base import initLogging
 from lib.rdq import Profile
 from lib.rdq.svciam import IamClient
 from lib.rdq.svcorg import OrganizationClient
@@ -7,10 +8,11 @@ from lib.rdq.svckms import KmsClient
 from lib.rdq.svcsqs import SQSClient
 from lib.rdq.svceventbridge import EventBridgeClient
 import lib.rdq.policy as policy
+import lib.core.discover as discover
 
-from cfg.installer import coreFunctionName, coreResourceName, coreFunctionCfg, ruleFunctionName, ruleFunctionCfg
-from cfg.roles import landingZoneRoles
-from cmds.codeLoader import getCoreCode, getTestCode, getRuleCode, getAvailableRules
+import cfg.installer as cfgInstaller
+import cfg.roles as cfgRoles
+import cmds.codeLoader as codeLoader
 
 def setup_assume_role(callingAccountId):
     profile = Profile()
@@ -103,7 +105,7 @@ class TestRdq(unittest.TestCase):
 
 
     def test_lambda(self):
-        codeZip = getTestCode('Echo')
+        codeZip = codeLoader.getTestCode('Echo')
         profile = Profile()
         iamc = IamClient(profile)
         lambdac = LambdaClient(profile)
@@ -129,7 +131,7 @@ class TestRdq(unittest.TestCase):
         functionDescriptionDelta1 = functionDescription + " Delta1"
         lambdaArn1 = lambdac.declareFunctionArn(functionName, functionDescriptionDelta1, roleArn, functionCfg, codeZip)
         assert lambdaArn1 == expectedLambdaArn
-        codeZipDelta1 = getTestCode('SimpleCredentialCheck')
+        codeZipDelta1 = codeLoader.getTestCode('SimpleCredentialCheck')
         lambdaArn2 = lambdac.declareFunctionArn(functionName, functionDescriptionDelta1, roleArn, functionCfg, codeZipDelta1)
         assert lambdaArn2 == expectedLambdaArn
         functionIn = {
@@ -219,8 +221,8 @@ class TestRdq(unittest.TestCase):
 
         sqsCmkDescription = "Encryption for SQS queued events"
         sqsCmkAlias = "queued_events"
-        eventBusName = coreResourceName('AutoRemediation')
-        queueName = coreResourceName('ComplianceChangeQueue')
+        eventBusName = cfgInstaller.coreResourceName('AutoRemediation')
+        queueName = cfgInstaller.coreResourceName('ComplianceChangeQueue')
         ruleName = 'ComplianceChange'
         ruleDescription = "Config Rule Compliance Change"
         eventPattern = {
@@ -228,14 +230,16 @@ class TestRdq(unittest.TestCase):
             'detail-type': ["Config Rules Compliance Change"]
         }
         codeFolder = 'ComplianceDispatcher'
-        codeZip = getCoreCode(codeFolder)
+        codeZip = codeLoader.getCoreCode(codeFolder)  # '2T0HOmr8RnN6lfMvlTz5KBwAWjYVevHB1CuQmWlUAcA='
         lambdaRoleDescription = "Compliance Dispatcher Lambda Role"
-        lambdaRoleName = coreResourceName('ComplianceDispatcher-LambdaRole')
-        functionName = coreFunctionName(codeFolder)
+        lambdaRoleName = cfgInstaller.coreResourceName('ComplianceDispatcher-LambdaRole')
+        functionName = cfgInstaller.coreFunctionName(codeFolder)
         functionDescription = 'Compliance Dispatcher Lambda'
-        functionCfg = coreFunctionCfg()
+        functionCfg = cfgInstaller.coreFunctionCfg()
 
-        orgId = orgc.getOrganizationId()
+        isLandingZoneDiscoveryEnabled = discover.isLandingZoneDiscoveryEnabled()
+        landingZoneConfig = discover.discoverLandingZone(profile)
+
         ebc.declareEventBusArn(eventBusName)
         ruleArn = ebc.declareEventBusRuleArn(eventBusName, ruleName, ruleDescription, eventPattern)
 
@@ -244,44 +248,45 @@ class TestRdq(unittest.TestCase):
         sqsStatements = [ policy.allowSQSForServiceProducer(profile, queueName, policy.principalEventBridge(), ruleArn) ]
         sqsArn = sqsc.declareQueueArn(queueName, cmkarn, sqsStatements, sqsVisibilityTimeoutSecs)
         ebc.declareEventBusTarget(eventBusName, ruleName, queueName, sqsArn, ebTargetMaxAgeSecs)
-        ebc.declareEventBusPublishPermissionForOrganization(eventBusName, orgId)
-
+        if landingZoneConfig:
+            orgId = orgc.getOrganizationId()
+            ebc.declareEventBusPublishPermissionForOrganization(eventBusName, orgId)
+        else:
+            ebc.declareEventBusPublishPermissionForAccount(eventBusName, profile.accountId)
         lambdaPolicyArn = iamc.declareAwsPolicyArn(policy.awsLambdaBasicExecution())
         roleArn = iamc.declareRoleArn(lambdaRoleName, lambdaRoleDescription, policy.trustLambda())
         iamc.declareManagedPoliciesForRole(lambdaRoleName, [lambdaPolicyArn])
         policyMapSQS = policy.permissions([policy.allowConsumeSQS(sqsArn), policy.allowDecryptCMK(cmkarn)])
-        remediationLambdaNamePattern = "function:{}".format(ruleFunctionName("*"))
+        remediationLambdaNamePattern = "function:{}".format(cfgInstaller.ruleFunctionName("*"))
         remediationLambdaArn = profile.getRegionAccountArn('lambda', remediationLambdaNamePattern)
         policyMapInvoke = policy.permissions([policy.allowInvokeLambda(remediationLambdaArn)])
-        policyMapDiscover = policy.permissions([policy.allowDescribeIam("*")])
-        inlinePolicyMap = {"ConsumeQueue": policyMapSQS, "InvokeRemediations": policyMapInvoke, "DiscoverRoles": policyMapDiscover}
+        inlinePolicyMap = {"ConsumeQueue": policyMapSQS, "InvokeRemediations": policyMapInvoke}
+        if isLandingZoneDiscoveryEnabled:
+            inlinePolicyMap['DiscoverRoles'] = policy.permissions([policy.allowDescribeIam("*")])
         iamc.declareInlinePoliciesForRole(lambdaRoleName, inlinePolicyMap)
         lambdaArn = lambdac.declareFunctionArn(functionName, functionDescription, roleArn, functionCfg, codeZip)
         lambdac.declareEventSourceMappingUUID(functionName, sqsArn, sqsPollCfg)
 
-        ruleFolders = getAvailableRules()
-        rFunctionCfg = ruleFunctionCfg()
-        lzRoles = landingZoneRoles()
-
-        rRoleName =  lzRoles['ControlTower']['Audit']
-        rRole = iamc.getRole(rRoleName)
-        self.assertIsNotNone(rRole)
-        rRoleArn = rRole['Arn']
+        ruleFolders = codeLoader.getAvailableRules()
+        rFunctionCfg = cfgInstaller.ruleFunctionCfg()
+        self.assertIsNotNone(landingZoneConfig) # Add support for single accounts
+        ruleRoleArn = landingZoneConfig['AuditRoleArn']
         for ruleFolder in ruleFolders:
-            rZip = getRuleCode(ruleFolder)
-            rFunctionName = ruleFunctionName(ruleFolder)
+            rZip = codeLoader.getRuleCode(ruleFolder)
+            rFunctionName = cfgInstaller.ruleFunctionName(ruleFolder)
             rFunctionDescription = '{} Auto Remediation Lambda'.format(ruleFolder)
-            rLambdaArn = lambdac.declareFunctionArn(rFunctionName, rFunctionDescription, rRoleArn, rFunctionCfg, rZip)
+            rLambdaArn = lambdac.declareFunctionArn(rFunctionName, rFunctionDescription, ruleRoleArn, rFunctionCfg, rZip)
 
-
-        lambdac.deleteEventSourceMapping(functionName, sqsArn)
-        lambdac.deleteFunction(functionName)
-        iamc.deleteRole(lambdaRoleName)
-        sqsc.deleteQueue(queueName)
-        ebc.deleteEventBus(eventBusName)
+        print("Done")
+        # lambdac.deleteEventSourceMapping(functionName, sqsArn)
+        # lambdac.deleteFunction(functionName)
+        # iamc.deleteRole(lambdaRoleName)
+        # sqsc.deleteQueue(queueName)
+        # ebc.deleteEventBus(eventBusName)
 
 
 if __name__ == '__main__':
+    initLogging(None, 'INFO')
     loader = unittest.TestLoader()
     loader.testMethodPrefix = "test_dispatcher"
     unittest.main(warnings='default', testLoader = loader)
