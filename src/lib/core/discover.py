@@ -1,6 +1,6 @@
 import logging
 
-from lib.core import selectConfig
+from lib.base import selectConfig
 from lib.rdq.svciam import IamClient
 
 import cfg.roles as cfgroles
