@@ -121,6 +121,9 @@ class DeltaBuild:
         self._rq = dict()
         self._ex = dict()
 
+    def __str__(self):
+        return "required: {}\nexisting: {}".format(json.dumps(self._rq), json.dumps(self._ex))
+
     def updateRequired(self, map):
         self._rq.update(map) 
 
@@ -141,6 +144,9 @@ class DeltaBuild:
 
     def normaliseExistingJson(self, *path):
         _normalise(self._ex, normaliseJson, path)
+
+    def required(self):
+        return dict(self._rq)
 
     def delta(self):
         rq = self._rq

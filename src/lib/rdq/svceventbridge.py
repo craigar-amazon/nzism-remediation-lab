@@ -1,6 +1,6 @@
 import botocore
 from lib.rdq import RdqError
-from .base import ServiceUtils
+from lib.rdq.base import ServiceUtils
 
 def _match_target(rq, ex):
     if rq['Arn'] != ex['Arn']: return False

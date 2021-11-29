@@ -4,7 +4,7 @@ import json
 import cfg.installer as cfginstall
 import cfg.rules as cfgrules
 
-from lib.core import ConfigError
+from lib.base import ConfigError
 import lib.core.discover as discover
 
 def has_expected_attribute(src, id, aname, expected):
@@ -99,12 +99,14 @@ def createDispatchList(event):
 
 def createInvokeList(profile, dispatchList):
     conformancePackName = cfgrules.conformancePackName()
-    configRuleMap = cfgrules.configRuleMapping()
-    previewRuleList = cfgrules.previewRules()
-    previewRuleSet = set(previewRuleList)
     optLandingZone = discover.discoverLandingZone(profile)
     functionCallList = []
     for dispatch in dispatchList:
+        targetAccountId = dispatch['awsAccountId']
+        configRuleMap = cfgrules.configRuleMapping(targetAccountId)
+        previewRuleList = cfgrules.previewRuleList(targetAccountId)
+        previewInclusive = cfgrules.isPreviewRuleListInclusive(targetAccountId)
+        previewRuleSet = set(previewRuleList)
         configRuleName = dispatch['configRuleNameBase']
         ruleCodeFolder = None
         if configRuleName in configRuleMap:
@@ -113,8 +115,8 @@ def createInvokeList(profile, dispatchList):
             logging.info("No auto remediation defined for rule %s", configRuleName)
             continue
         functionName = cfginstall.ruleFunctionName(ruleCodeFolder)
-        targetAccountId = dispatch['awsAccountId']
-        isPreview = configRuleName in previewRuleSet
+        isPreviewSetMember = configRuleName in previewRuleSet
+        isPreview = isPreviewSetMember if previewInclusive else (not isPreviewSetMember)
         isLocalAccount = profile.accountId == targetAccountId
         targetRole = None
         if optLandingZone:

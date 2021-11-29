@@ -56,7 +56,7 @@ class TestBase(unittest.TestCase):
         self.assertTrue('Timeout' in delta1)
         db.putRequired(300, 'Timeout')
         delta2 = db.delta()
-        self.assertEquals(len(delta2), 0)
+        self.assertEqual(len(delta2), 0)
 
 
 if __name__ == '__main__':

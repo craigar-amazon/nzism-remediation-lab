@@ -22,7 +22,7 @@ def discoverLandingZone(profile):
     lzcfg = selectConfig(lzroles, "landingZoneRoles", lz)
     auditRoleName = selectConfig(lzcfg, lz, 'Audit')
     remediationRoleName = selectConfig(lzcfg, lz, 'Remediation')
-    auditRoleArn = profile.getRoleArn(remediationRoleName)
+    auditRoleArn = profile.getRoleArn(auditRoleName)
     logging.info("Preferred audit role - %s", auditRoleArn)
     if searchLength > 1:
         iamc = IamClient(profile)

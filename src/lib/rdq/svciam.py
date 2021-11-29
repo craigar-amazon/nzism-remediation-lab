@@ -1,7 +1,7 @@
 import botocore
 
 from lib.rdq import RdqError
-from .base import ServiceUtils
+from lib.rdq.base import ServiceUtils
 
 def _canon_path(path):
     if len(path) == 0: return '/'

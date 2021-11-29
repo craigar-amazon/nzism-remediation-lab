@@ -2,8 +2,9 @@ import hashlib
 import base64
 import botocore
 
+from lib.base import DeltaBuild
 from lib.rdq import RdqError
-from .base import ServiceUtils
+from lib.rdq.base import ServiceUtils
 
 def _codeSha256(codeZip):
     hash = hashlib.sha256()
@@ -46,19 +47,20 @@ class LambdaClient:
 
 
     # Allow lambda:CreateFunction
-    def create_function(self, functionName, functionDescription, roleArn, cfg, codeZip):
+    def create_function(self, functionName, rq, codeZip):
         op = 'create_function'
         tracker = self._utils.init_tracker(op)
         while True:
             try:
                 response = self._client.create_function(
                     FunctionName=functionName,
-                    Runtime=cfg['Runtime'],
-                    Role=roleArn,
-                    Handler=cfg['Handler'],
-                    Description=functionDescription,
-                    Timeout=cfg['Timeout'],
-                    MemorySize=cfg['MemorySize'],
+                    Runtime=rq['Runtime'],
+                    Role=rq['Role'],
+                    Handler=rq['Handler'],
+                    Description=rq['Description'],
+                    Timeout=rq['Timeout'],
+                    MemorySize=rq['MemorySize'],
+                    Environment=rq['Environment'],
                     Code={
                         'ZipFile': codeZip
                     }
@@ -68,22 +70,23 @@ class LambdaClient:
                 if self._utils.retry_propagation_delay(e, tracker):
                     tracker = self._utils.backoff(tracker)
                     continue
-                raise RdqError(self._utils.fail(e, op, 'FunctionName', functionName, 'RoleArn', roleArn, 'Tracker', tracker))
+                raise RdqError(self._utils.fail(e, op, 'FunctionName', functionName, 'RoleArn', rq['Role'], 'Tracker', tracker))
 
     # Allow lambda:UpdateFunctionConfiguration
-    def update_function_configuration(self, functionName, functionDescription, roleArn, cfg):
+    def update_function_configuration(self, functionName, rq):
         op = 'update_function_configuration'
         tracker = self._utils.init_tracker(op)
         while True:
             try:
                 response = self._client.update_function_configuration(
                     FunctionName=functionName,
-                    Runtime=cfg['Runtime'],
-                    Role=roleArn,
-                    Handler=cfg['Handler'],
-                    Description=functionDescription,
-                    Timeout=cfg['Timeout'],
-                    MemorySize=cfg['MemorySize']
+                    Runtime=rq['Runtime'],
+                    Role=rq['Role'],
+                    Handler=rq['Handler'],
+                    Description=rq['Description'],
+                    Timeout=rq['Timeout'],
+                    MemorySize=rq['MemorySize'],
+                    Environment=rq['Environment']
                 )
                 return response
             except botocore.exceptions.ClientError as e:
@@ -93,7 +96,7 @@ class LambdaClient:
                 if self._utils.retry_resource_conflict(e, tracker):
                     tracker = self._utils.backoff(tracker)
                     continue
-                raise RdqError(self._utils.fail(e, op, 'FunctionName', functionName, 'RoleArn', roleArn, 'Tracker', tracker))
+                raise RdqError(self._utils.fail(e, op, 'FunctionName', functionName, 'RoleArn', rq['Role'], 'Tracker', tracker))
 
     # Allow lambda:UpdateFunctionCode
     def update_function_code(self, functionName, codeZip):
@@ -283,21 +286,32 @@ class LambdaClient:
             raise RdqError(self._utils.fail(e, op, 'FunctionName', functionName))
 
     def declareFunctionArn(self, functionName, functionDescription, roleArn, cfg, codeZip):
+        db = DeltaBuild()
+        db.putRequired('lambda_function.lambda_handler', 'Handler')
+        db.putRequired('INFO', 'Environment', 'Variables','LOGLEVEL')
+        db.updateRequired(cfg)
+        db.putRequired(functionDescription, 'Description')
+        db.putRequired(roleArn, 'Role')
+        rq = db.required()
         exFunction = self.get_function(functionName)
         if not exFunction:
-            newFunction = self.create_function(functionName, functionDescription, roleArn, cfg, codeZip)
+            newFunction = self.create_function(functionName, rq, codeZip)
             self.get_function_nonpending(functionName)
             return newFunction['FunctionArn']
         exFunctionConfiguration = exFunction['Configuration']
-        self.update_function_configuration(functionName, functionDescription, roleArn, cfg)
-        self.get_function_nonpending(functionName)
+        db.loadExisting(exFunctionConfiguration)
+        delta = db.delta()
+        if delta:
+            self._utils.info('CheckConfigurationDelta', 'FunctionName', functionName, "Reconfigured", "delta", delta)
+            self.update_function_configuration(functionName, rq)
+            self.get_function_nonpending(functionName)        
         exCodeSha256 = exFunctionConfiguration['CodeSha256']
         inCodeSha256 = _codeSha256(codeZip)
-        if inCodeSha256 == exCodeSha256:
-            self._utils.info('CheckCodeSHA256', 'FunctionName', functionName, "Code unchanged", "codeSHA256", exCodeSha256)
-        else:
+        if inCodeSha256 != exCodeSha256:
             self.update_function_code(functionName, codeZip)
             self.get_function_nonpending(functionName)
+        else:
+            self._utils.info('CheckCodeSHA256', 'FunctionName', functionName, "Code unchanged", "codeSHA256", exCodeSha256)
         return exFunctionConfiguration['FunctionArn']
 
     def declareInvokePermission(self, functionArn, sid, principal, sourceArn):

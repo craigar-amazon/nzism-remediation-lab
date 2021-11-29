@@ -21,15 +21,18 @@ def coreResourceName(baseName):
 def coreFunctionCfg():
     return {
         'Runtime': 'python3.8',
-        'Handler': 'lambda_function.lambda_handler',
         'Timeout': 600,
-        'MemorySize': 128
+        'MemorySize': 128,
+        'Environment': {
+            'Variables': {
+                'LOGLEVEL': 'INFO'
+            }
+        }
     }
 
 def ruleFunctionCfg():
     return {
         'Runtime': 'python3.8',
-        'Handler': 'lambda_function.lambda_handler',
         'Timeout': 180,
         'MemorySize': 128
     }
