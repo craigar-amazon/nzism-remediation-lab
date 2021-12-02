@@ -287,11 +287,11 @@ class LambdaClient:
 
     def declareFunctionArn(self, functionName, functionDescription, roleArn, cfg, codeZip):
         db = DeltaBuild()
-        db.putRequired('lambda_function.lambda_handler', 'Handler')
-        db.putRequired('INFO', 'Environment', 'Variables','LOGLEVEL')
+        db.putRequired('Handler', 'lambda_function.lambda_handler')
+        db.putRequired('Environment.Variables.LOGLEVEL', 'INFO')
         db.updateRequired(cfg)
-        db.putRequired(functionDescription, 'Description')
-        db.putRequired(roleArn, 'Role')
+        db.putRequired('Description', functionDescription)
+        db.putRequired('Role', roleArn)
         rq = db.required()
         exFunction = self.get_function(functionName)
         if not exFunction:
@@ -302,7 +302,7 @@ class LambdaClient:
         db.loadExisting(exFunctionConfiguration)
         delta = db.delta()
         if delta:
-            self._utils.info('CheckConfigurationDelta', 'FunctionName', functionName, "Reconfigured", "delta", delta)
+            self._utils.info('CheckConfigurationDelta', 'FunctionName', functionName, "Reconfiguring", "Delta", delta)
             self.update_function_configuration(functionName, rq)
             self.get_function_nonpending(functionName)        
         exCodeSha256 = exFunctionConfiguration['CodeSha256']
@@ -311,7 +311,7 @@ class LambdaClient:
             self.update_function_code(functionName, codeZip)
             self.get_function_nonpending(functionName)
         else:
-            self._utils.info('CheckCodeSHA256', 'FunctionName', functionName, "Code unchanged", "codeSHA256", exCodeSha256)
+            self._utils.info('CheckCodeSHA256', 'FunctionName', functionName, "Code unchanged", "CodeSHA256", exCodeSha256)
         return exFunctionConfiguration['FunctionArn']
 
     def declareInvokePermission(self, functionArn, sid, principal, sourceArn):

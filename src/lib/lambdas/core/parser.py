@@ -5,7 +5,7 @@ import cfg.installer as cfginstall
 import cfg.rules as cfgrules
 
 from lib.base import ConfigError
-import lib.core.discover as discover
+import lib.lambdas.discover as discover
 
 def has_expected_attribute(src, id, aname, expected):
     if not (aname in src):
@@ -80,7 +80,7 @@ def create_dispatch(record):
     dispatch = extract_dispatch(messageId, body)
     if not dispatch: return None
 
-    logging.info("Dispatch: %s", dispatch)
+    logging.info("Received Compliance Event: %s", dispatch)
     complianceType = dispatch['complianceType']
     if complianceType == 'NON_COMPLIANT':
         return dispatch

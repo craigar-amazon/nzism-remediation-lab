@@ -1,6 +1,6 @@
 import logging
 
-from lib.core import RetryError
+from lib.lambdas import RetryError
 
 def analyzeResponse(functionName, event, response):
     statusCode = response['StatusCode']

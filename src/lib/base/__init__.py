@@ -16,7 +16,8 @@ def initLogging(logLevelVariable='LOGLEVEL', defaultLevel='INFO'):
         loglevel = logging.WARNING
     elif levelName == 'E':
         loglevel = logging.ERROR
-    logging.basicConfig(level=loglevel)
+    logger = logging.getLogger()
+    logger.setLevel(loglevel)
     logging.info("Logging level is %s", logging.getLevelName(loglevel))
 
 class ConfigError(Exception):
@@ -38,15 +39,24 @@ def selectConfig(srcmap, context, aname):
     return srcmap[aname]
 
 def normaliseJson(raw, context):
+    indent = 2
     if type(raw) is str:
         try:
             map = json.loads(raw)
-            return json.dumps(map)
+            return json.dumps(map, indent=indent)
         except json.JSONDecodeError as e:
             msg = "Attribute `{}` is not well-formed JSON. Reason is {}".format(context, e)
-            logging.error("Maformed JSON in attribute %s | Reason: %s | Input: %s", context, e, raw)
+            logging.error("Malformed JSON in attribute %s | Reason: %s | Input: %s", context, e, raw)
             raise ConfigError(msg)
-    return json.dumps(raw, context)
+    return json.dumps(raw, indent=indent)
+
+def normaliseList(raw, context):
+    if not (type(raw) is list):
+        msg = "Attribute `{}` is not a List. Type is {}".format(context, type(raw))
+        logging.error("Expecting List in attribute %s", context)
+        raise ConfigError(msg)
+    return sorted(raw)
+    
 
 def normaliseInteger(raw, context):
     if type(raw) is int: return raw
@@ -54,7 +64,7 @@ def normaliseInteger(raw, context):
         return int(str(raw))
     except ValueError:
         msg = "Attribute `{}` is not a well-formed Integer. Input is {}".format(context, raw)
-        logging.error("Maformed Integer in attribute %s | Input: %s", context, raw)
+        logging.error("Malformed Integer in attribute %s | Input: %s", context, raw)
         raise ConfigError(msg)
 
 def normaliseString(raw, context):
@@ -62,44 +72,51 @@ def normaliseString(raw, context):
     return str(raw)
 
 
-def _canon_path(pathTuple):
-    if len(pathTuple) != 1: return pathTuple
-    return pathTuple[0].split('.')
+def _canon_path(path):
+    return path.split('.')
 
-def _update(dst, val, pathTuple):
-    if len(pathTuple) == 0: return
-    canonTuple = _canon_path(pathTuple)
-    _update_tail(dst, canonTuple[0], val, canonTuple[1:])
+def _update(dst, path, val):
+    canonPath = _canon_path(path)
+    if len(canonPath) == 0: return
+    _update_tail(dst, canonPath[0], val, canonPath[1:])
 
-def _update_tail(dst, key, val, tailTuple):
-    isLeaf = len(tailTuple) == 0
+def _update_tail(dst, key, val, tailPath):
+    isLeaf = len(tailPath) == 0
     if isLeaf:
         dst[key] = val
     else:
         if not (key in dst):
             dst[key] = {}
-        _update_tail(dst[key], tailTuple[0], val, tailTuple[1:])
+        _update_tail(dst[key], tailPath[0], val, tailPath[1:])
 
-def _normalise(dst, normMethod, pathTuple):
-    if len(pathTuple) == 0: return
-    canonTuple = _canon_path(pathTuple)
-    _normalise_tail(dst, canonTuple[0], normMethod, canonTuple[1:])
+def _normalise(dst, path, normMethod):
+    canonPath = _canon_path(path)
+    if len(canonPath) == 0: return
+    _normalise_tail(dst, canonPath[0], normMethod, canonPath[1:])
 
-def _normalise_tail(dst, key, normMethod, tailTuple):
+def _normalise_tail(dst, key, normMethod, tailPath):
     if not (key in dst): return
-    isLeaf = len(tailTuple) == 0
+    isLeaf = len(tailPath) == 0
     if isLeaf:
         rawVal = dst[key]
         if rawVal:
             normVal = normMethod(rawVal, key)
             dst[key] = normVal
     else:
-        _normalise_tail(dst[key], tailTuple[0], normMethod, tailTuple[1:])
+        _normalise_tail(dst[key], tailPath[0], normMethod, tailPath[1:])
 
 def _is_diff(ex, rq, context):
     if (type(ex) is str) and (type(rq) is str): return ex != rq
     if (type(ex) is int) and (type(rq) is int): return ex != rq
     if (type(ex) is bool) and (type(rq) is bool): return ex != rq
+    if (type(ex) is list) and (type(rq) is list):
+        exlen = len(ex)
+        rqlen = len(rq)
+        if exlen != rqlen: return True
+        for i in range(rqlen):
+            newContext = "{}[{}]".format(context, i)
+            if _is_diff(ex[i], rq[i], newContext): return True
+        return False
     if (type(ex) is dict) and (type(rq) is dict):
         for key in rq:
             newContext = "{}.{}".format(context, key)
@@ -127,23 +144,47 @@ class DeltaBuild:
     def updateRequired(self, map):
         self._rq.update(map) 
 
-    def putRequired(self, val, *path):
-        _update(self._rq, val, path)
+    def putRequired(self, path, val):
+        _update(self._rq, path, val)
+
+    def putRequiredJson(self, path, val):
+        _update(self._rq, path, normaliseJson(val, path))
+
+    def putRequiredList(self, path, val):
+        _update(self._rq, path, normaliseList(val, path))
 
     def loadExisting(self, ex):
         self._ex.update(ex)
 
-    def normaliseRequired(self, normMethod, *path):
-        _normalise(self._rq, normMethod, path)
+    def normaliseRequired(self, path, normMethod):
+        _normalise(self._rq, path, normMethod)
 
-    def normaliseExisting(self, normMethod, *path):
-        _normalise(self._ex, normMethod, path)
+    def normaliseExisting(self, path, normMethod):
+        _normalise(self._ex, path, normMethod)
 
-    def normaliseRequiredJson(self, *path):
-        _normalise(self._rq, normaliseJson, path)
+    def normaliseRequiredJson(self, path):
+        _normalise(self._rq, path, normaliseJson)
 
-    def normaliseExistingJson(self, *path):
-        _normalise(self._ex, normaliseJson, path)
+    def normaliseExistingJson(self, path):
+        _normalise(self._ex, path, normaliseJson)
+
+    def normaliseRequiredList(self, path):
+        _normalise(self._rq, path, normaliseList)
+
+    def normaliseExistingList(self, path):
+        _normalise(self._ex, path, normaliseList)
+
+    def normaliseRequiredInteger(self, path):
+        _normalise(self._rq, path, normaliseInteger)
+
+    def normaliseExistingInteger(self, path):
+        _normalise(self._ex, path, normaliseInteger)
+
+    def normaliseRequiredString(self, path):
+        _normalise(self._rq, path, normaliseString)
+
+    def normaliseExistingString(self, path):
+        _normalise(self._ex, path, normaliseString)
 
     def required(self):
         return dict(self._rq)

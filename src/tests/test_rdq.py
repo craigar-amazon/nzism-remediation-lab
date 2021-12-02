@@ -7,11 +7,16 @@ from lib.rdq.svclambda import LambdaClient
 from lib.rdq.svckms import KmsClient
 from lib.rdq.svcsqs import SQSClient
 from lib.rdq.svceventbridge import EventBridgeClient
+from lib.rdq.svccfn import CfnClient
 import lib.rdq.policy as policy
-import lib.core.discover as discover
+import lib.lambdas.discover as discover
+
+import lib.cfn as cfn
+import lib.cfn.iam as iam
+import lib.cfn.eventbridge as eb
+
 
 import cfg.installer as cfgInstaller
-import cfg.roles as cfgRoles
 import cmds.codeLoader as codeLoader
 
 def setup_assume_role(callingAccountId):
@@ -230,7 +235,7 @@ class TestRdq(unittest.TestCase):
             'detail-type': ["Config Rules Compliance Change"]
         }
         codeFolder = 'ComplianceDispatcher'
-        codeZip = codeLoader.getCoreCode(codeFolder)  # '2T0HOmr8RnN6lfMvlTz5KBwAWjYVevHB1CuQmWlUAcA='
+        codeZip = codeLoader.getCoreCode(codeFolder)
         lambdaRoleDescription = "Compliance Dispatcher Lambda Role"
         lambdaRoleName = cfgInstaller.coreResourceName('ComplianceDispatcher-LambdaRole')
         functionName = cfgInstaller.coreFunctionName(codeFolder)
@@ -278,17 +283,68 @@ class TestRdq(unittest.TestCase):
             rLambdaArn = lambdac.declareFunctionArn(rFunctionName, rFunctionDescription, ruleRoleArn, rFunctionCfg, rZip)
 
         print("Done")
-        # lambdac.deleteEventSourceMapping(functionName, sqsArn)
-        # lambdac.deleteFunction(functionName)
-        # iamc.deleteRole(lambdaRoleName)
-        # sqsc.deleteQueue(queueName)
-        # ebc.deleteEventBus(eventBusName)
+
+        for ruleFolder in ruleFolders:
+            rFunctionName = cfgInstaller.ruleFunctionName(ruleFolder)
+            lambdac.deleteFunction(rFunctionName)
+        lambdac.deleteEventSourceMapping(functionName, sqsArn)
+        lambdac.deleteFunction(functionName)
+        iamc.deleteRole(lambdaRoleName)
+        sqsc.deleteQueue(queueName)
+        ebc.deleteEventBus(eventBusName)
+
+
+    def test_stackset(self):
+        stackSetName = "UnitTest1StackSet"
+        stackSetDescription = "UnitTest1 Stack Set"
+
+        eventBusName = 'default'
+        ruleName = 'UnitTest1Rule'
+        ruleDescription = "Config Rule Compliance Change"
+        targetId = "unittest1Target"
+        inlinePolicyName = 'UnitTest1InlinePolicy'
+        roleName = 'UnitTest1EventBusRole'
+        roleDescription = 'UnitTest1 EventBus Target Role'
+        arnTargetEventBus = "arn:aws:events:ap-southeast-2:746869318262:event-bus/NZISM-AutoRemediation"
+        regions = ['ap-southeast-2']
+        rootId = 'r-djii'
+        ouId1 = 'ou-djii-q1v40guj'
+        ouIdSec = 'ou-djii-yzvg6i7l'
+        orgIds = [ ouId1, ouIdSec ]
+
+        resourceMap = {}
+        allowEventBusPutEvent = iam.Allow([eb.iamPutEvents], [arnTargetEventBus])
+        policyDocument = iam.PolicyDocument([allowEventBusPutEvent])
+        inlinePolicy = iam.InlinePolicy(inlinePolicyName, policyDocument)
+        trustPolicy = iam.TrustPolicy(eb.iamPrincipal)
+        resourceMap['rRole'] = iam.rRole(roleName, roleDescription, trustPolicy, None, [inlinePolicy])
+
+        ruleTarget = eb.Target(targetId, arnTargetEventBus, cfn.Arn('rRole'))
+        eventPattern = eb.EventPattern_ConfigComplianceChange()
+        resourceMap['rEventRule'] = eb.rRule(eventBusName, ruleName, eventPattern, [ruleTarget])
+        templateMap = cfn.Template(stackSetDescription, resourceMap)
+        profile = Profile()
+        cfnc = CfnClient(profile)
+        cfnc.deleteStackSet(stackSetName, orgIds, regions)
+        ss0 = cfnc.declareStackSet(stackSetName, templateMap, stackSetDescription, orgIds, regions)
+        self.assertTrue(len(ss0) == 2)
+        ss1 = cfnc.declareStackSet(stackSetName, templateMap, stackSetDescription, orgIds, regions)
+        self.assertTrue(len(ss1) == 2)
+        self.assertIsNone(ss1['OperationId'])
+        ss2 = cfnc.declareStackSet(stackSetName, templateMap, (stackSetDescription + ".1"), orgIds, regions)
+        self.assertTrue(len(ss2) == 2)
+        op2 = ss2['OperationId']
+        summary2 = cfnc.getStackSetOperation(stackSetName, op2)
+        self.assertTrue(len(summary2) > 0)
+        cfnc.isRunningStackSetOperations(stackSetName)
+        cfnc.deleteStackSet(stackSetName, orgIds, regions)
+
 
 
 if __name__ == '__main__':
     initLogging(None, 'INFO')
     loader = unittest.TestLoader()
-    loader.testMethodPrefix = "test_dispatcher"
+    loader.testMethodPrefix = "test_stackset"
     unittest.main(warnings='default', testLoader = loader)
     # setup_assume_role('746869318262')
     # test_assume_role('119399605612')

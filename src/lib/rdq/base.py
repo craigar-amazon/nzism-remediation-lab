@@ -1,5 +1,6 @@
 import logging
 import time
+import uuid
 import json
 
 def _args_to_map(args):
@@ -32,6 +33,8 @@ class ServiceUtils:
         if erc == 'NoSuchEntity': return True
         if svc == 'sqs':
             return erc == 'AWS.SimpleQueueService.NonExistentQueue'
+        if svc == 'cloudformation':
+            return (erc == 'StackSetNotFoundException') or (erc == 'OperationNotFoundException')
         return False
 
     def is_role_propagation_delay(self, e):
@@ -44,19 +47,57 @@ class ServiceUtils:
         erc = e.response['Error']['Code']
         return (erc == 'ResourceConflictException')
 
-    def init_tracker(self, op):
+    def is_operation_in_progress(self, e):
+        erc = e.response['Error']['Code']
+        return (erc == 'OperationInProgressException')
+
+    def init_tracker(self, op, id=None, maxSecs=None, policy="ElapsedAndAttempts"):
         sop = self.service_op(op)
-        return {'waitSecs': 1, 'attempt': 1, 'op': sop}
+        startedAt = time.time()
+        return {
+            'waitSecs': 1,
+            'attempt': 1,
+            'op': sop,
+            'id': id,
+            'maxAttempts': self._maxAttempts,
+            'maxSecs': maxSecs,
+            'policy': policy,
+            'startedAt': startedAt
+        }
     
     def retry(self, tracker):
-        return tracker['attempt'] < self._maxAttempts
+        attempt = tracker['attempt']
+        maxAttempts = tracker['maxAttempts']
+        maxSecs = tracker['maxSecs']
+        policy = tracker['policy']
+        elapsedSecs = time.time() - tracker['startedAt']
+        if maxSecs:
+            elapsedOk = elapsedSecs < maxSecs
+        else:
+            elapsedOk = True
+        if maxAttempts:
+            attemptsOk = attempt < maxAttempts
+        else:
+            attemptsOk = True
+        if policy == 'AttemptsOnly': return attemptsOk
+        if policy == 'ElapsedOnly': return elapsedOk
+        return elapsedOk and attemptsOk
+        
 
-    def backoff(self, tracker):
+    def backoff(self, tracker, limitSecs=-1):
+        op = tracker['op']
+        id = tracker['id']
         waitSecs = tracker['waitSecs']
         attempt = tracker['attempt']
         logging.info("Will retry rdq operation after backoff interval | Tracker: %s", tracker)
         time.sleep(waitSecs)
-        return {'waitSecs': (waitSecs * 2), 'attempt': (attempt + 1)}
+        newWait = waitSecs * 2
+        if limitSecs > 0:
+            newWait = min(newWait, limitSecs)
+        newTracker = dict(tracker)
+        newTracker['waitSecs'] = newWait
+        newTracker['attempt'] = attempt + 1
+        return newTracker
 
     def retry_propagation_delay(self, e, tracker):
         canRetry = self.retry(tracker) and self.is_role_propagation_delay(e)
@@ -70,14 +111,23 @@ class ServiceUtils:
             logging.info("Retry possible after resource conflict error | Detail: %s", e)
         return canRetry
 
+    def retry_operation_in_progress(self, e, tracker):
+        canRetry = self.retry(tracker) and self.is_operation_in_progress(e)
+        if canRetry:
+            logging.info("Retry possible after operation-in-progress error | Detail: %s", e)
+        return canRetry
+
+    def new_operation_id(self):
+        return str(uuid.uuid4())
+
     def sleep(self, waitSecs):
         time.sleep(waitSecs)
 
-    def to_json(self, src):
+    def to_json(self, src, indent=None):
         if type(src) is str:
             map = json.loads(src)
-            return json.dumps(map)
-        return json.dumps(src)
+            return json.dumps(map, indent=indent)
+        return json.dumps(src, indent=indent)
 
     def from_json(self, src):
         if type(src) is str:
@@ -111,11 +161,11 @@ class ServiceUtils:
         if argmap: ec['Arguments'] = argmap
         ec['AccountId'] = self._profile.accountId,
         ec['SessionName'] = self._profile.sessionName
-        logging.error("%s client error | Context: %s | Detail: %s", sop, ec, e)
+        logging.error("%s Client Error | Context: %s | Detail: %s", sop, ec, e)
         if argValue:
-            erm = "{} client error for {}: `{}`".format(sop, argType, argValue)
+            erm = "{} Client Error for {}: `{}`".format(sop, argType, argValue)
         else:
-            erm = "{} client error".format(sop)
+            erm = "{} Client Error".format(sop)
         return erm
 
     def integrity(self, msg, *args):
@@ -125,10 +175,20 @@ class ServiceUtils:
         if argmap: ec['Arguments'] = argmap
         ec['AccountId'] = self._profile.accountId,
         ec['SessionName'] = self._profile.sessionName
-        logging.error("%s data integrity error | Cause: %s | Context: %s", svc, msg, ec)
-        erm = "{} integrity error: {}".format(svc, msg)
+        logging.error("%s Data Integrity Error | Cause: %s | Context: %s", svc, msg, ec)
+        erm = "{} Data Integrity Error: {}".format(svc, msg)
         return erm
 
+    def expired(self, op, argType, argValue, *args):
+        svc = self._service
+        argmap = _args_to_map(args)
+        ec = { argType: argValue }
+        if argmap: ec['Arguments'] = argmap
+        ec['AccountId'] = self._profile.accountId,
+        ec['SessionName'] = self._profile.sessionName
+        logging.error("%s Expired | Service: %s | Context: %s", op, svc, ec)
+        erm = "{} Expired".format(op)
+        return erm
 
     def preview(self, op, args):
         sop = self.service_op(op)

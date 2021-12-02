@@ -2,8 +2,8 @@ from lib.rdq import Profile
 from lib.rdq.svclambda import LambdaClient
 
 from lib.base import initLogging
-import lib.core.parser as parser
-import lib.core.analyzer as analyzer
+import lib.lambdas.core.parser as parser
+import lib.lambdas.core.analyzer as analyzer
 
 
 def make_invocations(profile, functionCallList):
