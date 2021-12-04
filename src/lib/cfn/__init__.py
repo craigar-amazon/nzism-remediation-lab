@@ -11,10 +11,20 @@ def FnGetAtt(logicalName, attributeName):
         'Fn::GetAtt': [ logicalName, attributeName ]
     }
 
+def Output(description, value, exportName=None):
+    o = {}
+    o['Description'] = description
+    o['Value'] = value
+    if exportName:
+        o['Export'] = {
+            'Name': exportName
+        }
 
-def Template(description, resourceMap):
-    return {
-        'AWSTemplateFormatVersion': "2010-09-09",
-        'Description': description,
-        'Resources': resourceMap
-    }
+def Template(description, resourceMap, outputMap=None):
+    t = {}
+    t['AWSTemplateFormatVersion'] = "2010-09-09"
+    t['Description'] = description
+    t['Resources'] = resourceMap
+    if outputMap:
+        t['Outputs'] = outputMap
+    return t

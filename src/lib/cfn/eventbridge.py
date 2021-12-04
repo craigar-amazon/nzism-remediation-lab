@@ -1,4 +1,4 @@
-
+# IAM Policy Actions
 iamPutEvents = "events:PutEvents"
 
 iamPrincipal = {

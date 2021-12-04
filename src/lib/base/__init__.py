@@ -38,6 +38,90 @@ def selectConfig(srcmap, context, aname):
         raise ConfigError(msg)
     return srcmap[aname]
 
+class Tags:
+    def __init__(self, **kwargs):
+        self._map = {}
+        for kwd in kwargs:
+            self._map[kwd] = str(kwargs[kwd])
+
+    def put(self, kwd, value):
+        self._map[kwd] = str(value)
+
+    def get(self, kwd):
+        return self._map.get(kwd)
+
+    def update(self, tags, context=None):
+        if isinstance(tags, Tags):
+            self.updateDict(tags._map)
+        elif type(tags) is list:
+            self.updateList(tags)
+        elif type(tags) is dict:
+            self.updateDict(tags)
+        else:
+            msg = "Unsupported tag format {}".format(type(tags))
+            if context:
+                msg = msg + " used by attribute " + context
+            logging.error(msg)
+            raise ConfigError(msg)
+
+    def updateList(self, rlist):
+        rmap = dict()
+        for rtag in rlist:
+            if not (type(rtag) is dict): continue
+            if not ('Key' in rtag): continue
+            if not ('Value' in rtag): continue
+            rkey = rtag['Key']
+            if not (type(rkey) is str): continue
+            if len(rkey) == 0: continue
+            rval = rtag['Value']
+            rmap[rkey] = str(rval)
+        self._map.update(rmap)
+
+    def updateDict(self, rdict):
+        for kwd in rdict:
+            self._map[kwd] = str(rdict[kwd])
+
+    def toList(self):
+        sk = sorted(self._map.keys())
+        r = list()
+        for k in sk:
+            v = self._map[k]
+            tag = {
+                'Key': k,
+                'Value': v
+            }
+            r.append(tag)
+        return r
+
+    def toDict(self):
+        return dict(self._map)
+
+    def equalsDict(self, rmap):
+        lmap = self._map
+        lkeys = sorted(lmap.keys())
+        rkeys = sorted(rmap.keys())
+        if len(lkeys) != len(rkeys): return False
+        count = len(lkeys)
+        for i in range(count):
+            lkey = lkeys[i]
+            rkey = rkeys[i]
+            if lkey != rkey: return False
+            lval = lmap[lkey]
+            rval = rmap[rkey]
+            if lval != rval: return False
+        return True
+
+    def __str__(self):
+        return json.dumps(self._map)
+
+    def __eq__(self, rhs):
+        if isinstance(rhs, Tags):
+            return self.equalsDict(rhs._map)
+        if type(rhs) is dict:
+            return self.equalsDict(rhs)
+        return False
+
+
 def normaliseJson(raw, context):
     indent = 2
     if type(raw) is str:
@@ -56,7 +140,16 @@ def normaliseList(raw, context):
         logging.error("Expecting List in attribute %s", context)
         raise ConfigError(msg)
     return sorted(raw)
-    
+
+def normaliseTagList(raw, context):
+    tags = Tags()
+    tags.update(raw, context)
+    return tags.toList()
+
+def normaliseTagDict(raw, context):
+    tags = Tags()
+    tags.update(raw, context)
+    return tags.toDict()
 
 def normaliseInteger(raw, context):
     if type(raw) is int: return raw
@@ -153,6 +246,12 @@ class DeltaBuild:
     def putRequiredList(self, path, val):
         _update(self._rq, path, normaliseList(val, path))
 
+    def putRequiredTagList(self, path, val):
+        _update(self._rq, path, normaliseTagList(val, path))
+
+    def putRequiredTagDict(self, path, val):
+        _update(self._rq, path, normaliseTagDict(val, path))
+
     def loadExisting(self, ex):
         self._ex.update(ex)
 
@@ -173,6 +272,18 @@ class DeltaBuild:
 
     def normaliseExistingList(self, path):
         _normalise(self._ex, path, normaliseList)
+
+    def normaliseRequiredTagList(self, path):
+        _normalise(self._rq, path, normaliseTagList)
+
+    def normaliseExistingTagList(self, path):
+        _normalise(self._ex, path, normaliseTagList)
+
+    def normaliseRequiredTagDict(self, path):
+        _normalise(self._rq, path, normaliseTagDict)
+
+    def normaliseExistingTagDict(self, path):
+        _normalise(self._ex, path, normaliseTagDict)
 
     def normaliseRequiredInteger(self, path):
         _normalise(self._rq, path, normaliseInteger)
@@ -202,3 +313,4 @@ class DeltaBuild:
             else:
                 diff[key] = rqVal
         return diff
+

@@ -38,8 +38,9 @@ class LambdaClient:
             if not exFunction: return None
             fc = exFunction['Configuration']
             state = fc['State']
-            lastUpdateStatus = fc['LastUpdateStatus']
-            self._utils.info(op, 'FunctionName', functionName, "Checking function state", "State", state, "LastUpdateStatus", lastUpdateStatus)
+            lastUpdateStatus = fc.get('LastUpdateStatus')
+            stateReason = fc.get('StateReason')
+            self._utils.info(op, 'FunctionName', functionName, "Checking function state", "State", state, "LastUpdateStatus", lastUpdateStatus, "StateReason", stateReason)
             retry = (state == 'Pending') or (lastUpdateStatus == 'InProgress')
             if not retry: return exFunction
             if self._utils.retry(tracker):

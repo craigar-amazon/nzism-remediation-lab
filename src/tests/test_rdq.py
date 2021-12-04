@@ -317,7 +317,7 @@ class TestRdq(unittest.TestCase):
         policyDocument = iam.PolicyDocument([allowEventBusPutEvent])
         inlinePolicy = iam.InlinePolicy(inlinePolicyName, policyDocument)
         trustPolicy = iam.TrustPolicy(eb.iamPrincipal)
-        resourceMap['rRole'] = iam.rRole(roleName, roleDescription, trustPolicy, None, [inlinePolicy])
+        resourceMap['rRole'] = iam.IAM_Role(roleName, roleDescription, trustPolicy, None, [inlinePolicy])
 
         ruleTarget = eb.Target(targetId, arnTargetEventBus, cfn.Arn('rRole'))
         eventPattern = eb.EventPattern_ConfigComplianceChange()
@@ -337,6 +337,7 @@ class TestRdq(unittest.TestCase):
         summary2 = cfnc.getStackSetOperation(stackSetName, op2)
         self.assertTrue(len(summary2) > 0)
         cfnc.isRunningStackSetOperations(stackSetName)
+        print("Done")
         cfnc.deleteStackSet(stackSetName, orgIds, regions)
 
 

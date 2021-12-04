@@ -2,7 +2,7 @@ from lib.rule import RuleMain
 from lib.rdq.svcs3control import S3ControlClient
 
 def lambda_handler(event, context):
-    main = RuleMain('S3BPA')
+    main = RuleMain()
     main.addHandler(
         configRuleName='s3-account-level-public-access-blocks-periodic',
         resourceType= 'AWS::::Account',

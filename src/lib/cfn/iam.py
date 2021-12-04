@@ -1,13 +1,39 @@
-
-def Allow(actionList, resourceList, condition=None):
-  r = {
-    'Effect': "Allow",
-    'Action': actionList,
-    'Resource': resourceList
+def iamPrincipal_Account(accountId):
+  return {
+    'AWS': "arn:aws:iam::{}:root".format(accountId)
   }
-  if condition:
-    r['Condition'] = condition
+
+def iamPrincipal_Role(accountId, roleName):
+  return {
+    'AWS': "arn:aws:iam::{}:role/{}".format(accountId, roleName)
+  }
+
+def ArnLike(key, value):
+  kv = {}
+  kv[key] = value
+  return {
+    'ArnLike': kv
+  }
+
+def Allow(action, resource, condition=None, sid=None):
+  r = {}
+  if sid: r['Sid'] = sid
+  r['Effect'] = "Allow"
+  r['Action'] = action
+  r['Resource'] = resource
+  if condition: r['Condition'] = condition
   return r
+
+def ResourceAllow(action, principal, resource="*", condition=None, sid=None):
+  r = {}
+  if sid: r['Sid'] = sid
+  r['Effect'] = "Allow"
+  r['Principal'] = principal
+  r['Action'] = action
+  r['Resource'] = resource
+  if condition: r['Condition'] = condition
+  return r
+
 
 def PolicyDocument(statementList):
   return {
@@ -33,7 +59,7 @@ def TrustPolicy(principal):
         ]
     }
 
-def rRole(roleName, description, trustPolicy, managedPolicyArnList, inlinePolicyList):
+def IAM_Role(roleName, description, trustPolicy, managedPolicyArnList, inlinePolicyList):
     props =  {
       'RoleName': roleName,
       'Path': "/",
