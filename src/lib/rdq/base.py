@@ -3,12 +3,18 @@ import time
 import uuid
 import json
 
+
+def _fmt_argval(val):
+    t = type(val)
+    if (t is str) or (t is int) or (t is bool): return val
+    return str(val)
+
 def _args_to_map(args):
     map = {}
     key = ''
     for a in args:
         if key:
-            map[key] = a
+            map[key] = _fmt_argval(a)
             key = ''
         else:
             key = a
@@ -139,6 +145,11 @@ class ServiceUtils:
             'Version': "2012-10-17",
             'Statement': statements
         }
+
+    def declare_tags(self, arn, tagsRequired, tagsExisting=None):
+        tagsDelta = tagsRequired.subtract(tagsExisting)
+        if tagsDelta.isEmpty(): return True
+        return self._profile.applyTagsToArn(arn, tagsDelta)
 
     def info(self, op, argType, argValue, msg, *args):
         sop = self.service_op(op)

@@ -39,18 +39,25 @@ def selectConfig(srcmap, context, aname):
     return srcmap[aname]
 
 class Tags:
-    def __init__(self, **kwargs):
+    def __init__(self, tags=None, context=None):
         self._map = {}
-        for kwd in kwargs:
-            self._map[kwd] = str(kwargs[kwd])
+        self.update(tags, context)
+
+    def isEmpty(self):
+        return len(self._map) == 0
 
     def put(self, kwd, value):
         self._map[kwd] = str(value)
+
+    def putAll(self, **kwargs):
+        for kwd in kwargs:
+            self._map[kwd] = str(kwargs[kwd])
 
     def get(self, kwd):
         return self._map.get(kwd)
 
     def update(self, tags, context=None):
+        if tags is None: return
         if isinstance(tags, Tags):
             self.updateDict(tags._map)
         elif type(tags) is list:
@@ -80,6 +87,27 @@ class Tags:
     def updateDict(self, rdict):
         for kwd in rdict:
             self._map[kwd] = str(rdict[kwd])
+
+    def subtract(self, tags):
+        lmap = self._map
+        if tags:
+            rmap = tags._map
+            result = dict()
+            for lkey in lmap:
+                delta = False
+                if lkey in rmap:
+                    lval = lmap[lkey]
+                    rval = rmap[lkey]
+                    delta = lval != rval
+                else:
+                    delta = True
+                if delta:
+                    result[lkey] = lmap[lkey]
+        else:
+            result = dict(lmap)
+        newTags = Tags()
+        newTags._map = result
+        return newTags
 
     def toList(self):
         sk = sorted(self._map.keys())
@@ -141,15 +169,8 @@ def normaliseList(raw, context):
         raise ConfigError(msg)
     return sorted(raw)
 
-def normaliseTagList(raw, context):
-    tags = Tags()
-    tags.update(raw, context)
-    return tags.toList()
-
-def normaliseTagDict(raw, context):
-    tags = Tags()
-    tags.update(raw, context)
-    return tags.toDict()
+def normaliseTags(raw, context):
+    return Tags(raw, context)
 
 def normaliseInteger(raw, context):
     if type(raw) is int: return raw
@@ -202,6 +223,7 @@ def _is_diff(ex, rq, context):
     if (type(ex) is str) and (type(rq) is str): return ex != rq
     if (type(ex) is int) and (type(rq) is int): return ex != rq
     if (type(ex) is bool) and (type(rq) is bool): return ex != rq
+    if (type(ex) is Tags) and (type(rq) is Tags): return ex != rq
     if (type(ex) is list) and (type(rq) is list):
         exlen = len(ex)
         rqlen = len(rq)
@@ -246,12 +268,6 @@ class DeltaBuild:
     def putRequiredList(self, path, val):
         _update(self._rq, path, normaliseList(val, path))
 
-    def putRequiredTagList(self, path, val):
-        _update(self._rq, path, normaliseTagList(val, path))
-
-    def putRequiredTagDict(self, path, val):
-        _update(self._rq, path, normaliseTagDict(val, path))
-
     def loadExisting(self, ex):
         self._ex.update(ex)
 
@@ -273,18 +289,6 @@ class DeltaBuild:
     def normaliseExistingList(self, path):
         _normalise(self._ex, path, normaliseList)
 
-    def normaliseRequiredTagList(self, path):
-        _normalise(self._rq, path, normaliseTagList)
-
-    def normaliseExistingTagList(self, path):
-        _normalise(self._ex, path, normaliseTagList)
-
-    def normaliseRequiredTagDict(self, path):
-        _normalise(self._rq, path, normaliseTagDict)
-
-    def normaliseExistingTagDict(self, path):
-        _normalise(self._ex, path, normaliseTagDict)
-
     def normaliseRequiredInteger(self, path):
         _normalise(self._rq, path, normaliseInteger)
 
@@ -296,6 +300,9 @@ class DeltaBuild:
 
     def normaliseExistingString(self, path):
         _normalise(self._ex, path, normaliseString)
+
+    def normaliseExistingTags(self, path):
+        _normalise(self._ex, path, normaliseTags)
 
     def required(self):
         return dict(self._rq)

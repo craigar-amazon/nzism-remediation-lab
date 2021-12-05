@@ -2,7 +2,7 @@ import hashlib
 import base64
 import botocore
 
-from lib.base import DeltaBuild
+from lib.base import Tags, DeltaBuild
 from lib.rdq import RdqError
 from lib.rdq.base import ServiceUtils
 
@@ -48,7 +48,7 @@ class LambdaClient:
 
 
     # Allow lambda:CreateFunction
-    def create_function(self, functionName, rq, codeZip):
+    def create_function(self, functionName, rq, codeZip, tags):
         op = 'create_function'
         tracker = self._utils.init_tracker(op)
         while True:
@@ -64,7 +64,8 @@ class LambdaClient:
                     Environment=rq['Environment'],
                     Code={
                         'ZipFile': codeZip
-                    }
+                    },
+                    Tags=tags.toDict()
                 )
                 return response
             except botocore.exceptions.ClientError as e:
@@ -286,7 +287,7 @@ class LambdaClient:
         except botocore.exceptions.ClientError as e:
             raise RdqError(self._utils.fail(e, op, 'FunctionName', functionName))
 
-    def declareFunctionArn(self, functionName, functionDescription, roleArn, cfg, codeZip):
+    def declareFunctionArn(self, functionName, functionDescription, roleArn, cfg, codeZip, tags):
         db = DeltaBuild()
         db.putRequired('Handler', 'lambda_function.lambda_handler')
         db.putRequired('Environment.Variables.LOGLEVEL', 'INFO')
@@ -296,10 +297,11 @@ class LambdaClient:
         rq = db.required()
         exFunction = self.get_function(functionName)
         if not exFunction:
-            newFunction = self.create_function(functionName, rq, codeZip)
+            newFunction = self.create_function(functionName, rq, codeZip, tags)
             self.get_function_nonpending(functionName)
             return newFunction['FunctionArn']
         exFunctionConfiguration = exFunction['Configuration']
+        exFunctionArn = exFunctionConfiguration['FunctionArn']
         db.loadExisting(exFunctionConfiguration)
         delta = db.delta()
         if delta:
@@ -313,7 +315,9 @@ class LambdaClient:
             self.get_function_nonpending(functionName)
         else:
             self._utils.info('CheckCodeSHA256', 'FunctionName', functionName, "Code unchanged", "CodeSHA256", exCodeSha256)
-        return exFunctionConfiguration['FunctionArn']
+        exTags = Tags(exFunction['Tags'], functionName)
+        self._utils.declare_tags(exFunctionArn, tags, exTags)
+        return exFunctionArn
 
     def declareInvokePermission(self, functionArn, sid, principal, sourceArn):
         action = "lambda:InvokeFunction"

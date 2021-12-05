@@ -2,6 +2,8 @@ import logging
 import botocore
 import boto3
 
+import lib.base as base
+
 def _role_arn(accountId, roleName):
     return "arn:aws:iam::{}:role/{}".format(accountId, roleName)
 
@@ -25,10 +27,11 @@ class Profile:
                 session = boto3.Session(region_name=regionName)
             else:
                 session = boto3.Session()
+        self._sts_client = session.client('sts')
+        self._tag_client = session.client('resourcegroupstaggingapi')
         op = "sts:get_caller_identity"
         try:
-            sts_client = session.client('sts')
-            r = sts_client.get_caller_identity()
+            r = self._sts_client.get_caller_identity()
             self._userId = r['UserId']
             self._accountId = r['Account']
             self._arn = r['Arn']
@@ -78,8 +81,7 @@ class Profile:
         roleArn = _role_arn(accountId, roleName)
         op = "sts:assume_role"
         try:
-            sts_client = self._session.client('sts')
-            response = sts_client.assume_role(
+            response = self._sts_client.assume_role(
                 RoleArn=roleArn,
                 RoleSessionName=sessionName,
                 DurationSeconds=durationSecs
@@ -107,6 +109,33 @@ class Profile:
             logging.error("botocore ClientError | Cause: %s | Api: %s | Context: %s | Detail %s", erc, op, ectx, e)
             erm = "Role {} Account {} could not assume role {}".format(self._roleName, self._accountId, roleArn)
             raise RdqError(erm)
+
+    def _tag_resources(self, arnList, tags):
+        op = 'resourcegroupstaggingapi:tag_resources'
+        ectx = {
+            'ArnList': arnList,
+            'Tags': tags.toDict(),
+            'FromAccount': self._accountId,
+            'FromRoleName': self._roleName,
+            'FromRegionName': self._regionName
+        }
+        try:
+            response = self._tag_client.tag_resources(
+                ResourceARNList=arnList,
+                Tags=tags.toDict()
+            )
+            failMap = response['FailedResourcesMap']
+            if len(failMap) == 0: return True
+            logging.error("Tagging Failure | FailedResponseMap: %s | Api: %s | Context: %s", failMap, op, ectx)
+            return False
+        except botocore.exceptions.ClientError as e:
+            erc = e.response['Error']['Code']
+            logging.error("botocore ClientError | Cause: %s | Api: %s | Context: %s | Detail %s", erc, op, ectx, e)
+            return False
+
+    def applyTagsToArn(self, arn, tags):
+        if tags.isEmpty(): return True
+        return self._tag_resources([arn], tags)
 
     def enablePreview(self, enable=True):
         exLog = self._previewLog

@@ -1,5 +1,5 @@
 import unittest
-from lib.base import initLogging
+from lib.base import initLogging, Tags
 from lib.rdq import Profile
 from lib.rdq.svciam import IamClient
 from lib.rdq.svcorg import OrganizationClient
@@ -224,6 +224,11 @@ class TestRdq(unittest.TestCase):
             'MaximumBatchingWindowInSeconds': 0
         }
 
+        tagsCore = Tags(cfgInstaller.coreResourceTags(), "coreResourceTags")
+        tagsCore.putAll(Lifecycle="Unit Test")
+        tagsRule = Tags(cfgInstaller.ruleResourceTags(), "ruleResourceTags")
+        tagsRule.putAll(Lifecycle="Development")
+
         sqsCmkDescription = "Encryption for SQS queued events"
         sqsCmkAlias = "queued_events"
         eventBusName = cfgInstaller.coreResourceName('AutoRemediation')
@@ -269,7 +274,7 @@ class TestRdq(unittest.TestCase):
         if isLandingZoneDiscoveryEnabled:
             inlinePolicyMap['DiscoverRoles'] = policy.permissions([policy.allowDescribeIam("*")])
         iamc.declareInlinePoliciesForRole(lambdaRoleName, inlinePolicyMap)
-        lambdaArn = lambdac.declareFunctionArn(functionName, functionDescription, roleArn, functionCfg, codeZip)
+        lambdaArn = lambdac.declareFunctionArn(functionName, functionDescription, roleArn, functionCfg, codeZip, tagsCore)
         lambdac.declareEventSourceMappingUUID(functionName, sqsArn, sqsPollCfg)
 
         ruleFolders = codeLoader.getAvailableRules()
@@ -280,7 +285,7 @@ class TestRdq(unittest.TestCase):
             rZip = codeLoader.getRuleCode(ruleFolder)
             rFunctionName = cfgInstaller.ruleFunctionName(ruleFolder)
             rFunctionDescription = '{} Auto Remediation Lambda'.format(ruleFolder)
-            rLambdaArn = lambdac.declareFunctionArn(rFunctionName, rFunctionDescription, ruleRoleArn, rFunctionCfg, rZip)
+            rLambdaArn = lambdac.declareFunctionArn(rFunctionName, rFunctionDescription, ruleRoleArn, rFunctionCfg, rZip, tagsRule)
 
         print("Done")
 
@@ -345,7 +350,7 @@ class TestRdq(unittest.TestCase):
 if __name__ == '__main__':
     initLogging(None, 'INFO')
     loader = unittest.TestLoader()
-    loader.testMethodPrefix = "test_stackset"
+    loader.testMethodPrefix = "test_dispatcher"
     unittest.main(warnings='default', testLoader = loader)
     # setup_assume_role('746869318262')
     # test_assume_role('119399605612')

@@ -17,6 +17,11 @@ def ruleFunctionName(codeFolder):
 def coreResourceName(baseName):
     return "NZISM-{}".format(baseName)
 
+def coreResourceTags():
+    return {
+        'Application': 'NZISM Auto Remediation',
+        'Release': '0.1'
+    }
 
 def coreFunctionCfg():
     return {
@@ -28,6 +33,12 @@ def coreFunctionCfg():
                 'LOGLEVEL': 'INFO'
             }
         }
+    }
+    
+def ruleResourceTags():
+    return {
+        'Application': 'NZISM Auto Remediation',
+        'Release': '0.1'
     }
 
 def ruleFunctionCfg():

@@ -9,14 +9,18 @@ def normaliseUpper(raw, context):
 class TestBase(unittest.TestCase):
 
     def test_tags(self):
-        t1 = b.Tags(Compliance="NZISM", AutoRemediated=True)
+        t1 = b.Tags()
+        t1.putAll(Compliance="NZISM", AutoRemediated=True)
         t1.put('Classification', "Sensitive")
         t2 = b.Tags()
         t2.put('Project', "Blueprints")
         t1.update(t2)
-        t3 = b.Tags(Compliance="NIST", AutoRemediated=True)
-        t4 = b.Tags(Compliance="NZISM", AutoRemediated=True, Project="Blueprints", Classification="Sensitive")
-        t5 = b.Tags(Compliance="NIST", AutoRemediated=True)
+        t3 = b.Tags()
+        t3.putAll(Compliance="NIST", AutoRemediated=True)
+        t4 = b.Tags()
+        t4.putAll(Compliance="NZISM", AutoRemediated=True, Project="Blueprints", Classification="Sensitive")
+        t5 = b.Tags()
+        t5.putAll(Compliance="NIST", AutoRemediated=True)
         d4 = b.Tags()
         d4.update({
             'Compliance':"NZISM",
@@ -53,8 +57,15 @@ class TestBase(unittest.TestCase):
         self.assertFalse(t1 == l6)
         self.assertTrue(t3 == t5)
 
+        l4l5 = l4.subtract(l5)
+        self.assertEqual(l4l5.get('AutoRemediated'), 'True')
+        l5l6 = l5.subtract(l6)
+        self.assertEqual(l5l6.get('Project'), 'Blueprints')
+        self.assertIsNone(l5l6.get('Lifecycle'))
+
     def test_deltabuild(self):
-        t1 = b.Tags(Compliance="NZISM", AutoRemediated=True, Classification="Sensitive")
+        t1 = b.Tags()
+        t1.putAll(Compliance="NZISM", AutoRemediated=True, Classification="Sensitive")
         r1 = {
             'Runtime': 'python3.8',
             'Handler': 'lambda_function.lambda_handler',
@@ -99,8 +110,8 @@ class TestBase(unittest.TestCase):
         db.putRequired('Environment.Variables.LOGLEVEL', 'ERROR')
         db.putRequired('Environment.Variables.LOGLEVEL', 'INFO')
         db.putRequired('Environment.Variables', {'LOGLEVEL': 'warning'})
-        db.putRequiredTagList("TagsL", t1)
-        db.putRequiredTagDict("TagsD", t1)
+        db.putRequired("TagsL", t1)
+        db.putRequired("TagsD", t1)
         db.loadExisting(x1)
         db.normaliseRequiredJson('Policy')
         db.normaliseRequired('Environment.Variables.LOGLEVEL', lambda raw, context: raw.upper())
@@ -108,8 +119,8 @@ class TestBase(unittest.TestCase):
         db.normaliseExistingJson('Policy')
         db.normaliseExisting('MemorySize', b.normaliseInteger)
         db.normaliseExistingList('Capabilities')
-        db.normaliseExistingTagList("TagsL")
-        db.normaliseExistingTagDict("TagsD")
+        db.normaliseExistingTags("TagsL")
+        db.normaliseExistingTags("TagsD")
         delta1 = db.delta()
         self.assertTrue('Timeout' in delta1)
         self.assertEqual(len(delta1), 1)
