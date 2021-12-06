@@ -1,6 +1,8 @@
 import botocore
+
+from lib.base import Tags, DeltaBuild
 from lib.rdq import RdqError
-from .base import ServiceUtils
+from lib.rdq.base import ServiceUtils
 
 class SQSClient:
     def __init__(self, profile):
@@ -48,18 +50,44 @@ class SQSClient:
         except botocore.exceptions.ClientError as e:
             raise RdqError(self._utils.fail(e, op, 'QueueUrl', queueUrl))
 
+    def list_queue_tags(self, queueUrl):
+        op = 'list_queue_tags'
+        try:
+            response = self._client.list_queue_tags(
+                QueueUrl=queueUrl
+            )
+            return Tags(response['Tags'], queueUrl)
+        except botocore.exceptions.ClientError as e:
+            raise RdqError(self._utils.fail(e, op, 'QueueUrl', queueUrl))
+
     # PREVIEW
-    def set_queue_attributes(self, queueUrl, deltaMap):
+    def set_queue_attributes(self, queueUrl, delta):
         op = 'set_queue_attributes'
         args = {
             'QueueUrl': queueUrl,
-            'Attributes': deltaMap
+            'Attributes': delta
         }
         if self._utils.preview(op, args): return
         try:
             self._client.set_queue_attributes(
                 QueueUrl=queueUrl,
-                Attributes=deltaMap
+                Attributes=delta
+            )
+        except botocore.exceptions.ClientError as e:
+            raise RdqError(self._utils.fail(e, op, 'QueueUrl', queueUrl))
+
+    #PREVIEW
+    def tag_queue(self, queueUrl, tags):
+        op = 'tag_queue'
+        args = {
+            'QueueUrl': queueUrl,
+            'Attributes': tags.toDict()
+        }
+        if self._utils.preview(op, args): return
+        try:
+            self._client.tag_queue(
+                QueueUrl=queueUrl,
+                Tags=tags.toDict()
             )
         except botocore.exceptions.ClientError as e:
             raise RdqError(self._utils.fail(e, op, 'QueueUrl', queueUrl))
@@ -81,54 +109,51 @@ class SQSClient:
             raise RdqError(self._utils.fail(e, op, 'QueueUrl', queueUrl))
 
     # PREVIEW
-    def create_queue(self, queueName, reqd):
+    def create_queue(self, queueName, rq, tags):
         op = 'create_queue'
         args = {
             'QueueName': queueName,
-            'Attributes': reqd
+            'Attributes': rq,
+            'tags': tags.toDict()
         }
         if self._utils.preview(op, args): return True
         try:
             self._client.create_queue(
                 QueueName=queueName,
-                Attributes=reqd
+                Attributes=rq,
+                tags=tags.toDict()
             )
         except botocore.exceptions.ClientError as e:
             raise RdqError(self._utils.fail(e, op, 'QueueName', queueName))
 
     #PREVIEW
-    def declareQueueArn(self, queueName, kmsMasterKeyId, policyStatements, visibilityTimeoutSecs):
+    def declareQueueArn(self, queueName, kmsMasterKeyId, policyStatements, visibilityTimeoutSecs, tags):
         statements = [self._policy_statement_default(queueName)]
         statements.extend(policyStatements)
         policyMap = self._utils.policy_map(statements)
-        policyJson = self._utils.to_json(policyMap)
         resourceArn = self._resource_arn(queueName)
-        anames = ['KmsMasterKeyId', 'Policy', 'VisibilityTimeout']
-        reqdMap = {
-            'KmsMasterKeyId': kmsMasterKeyId,
-            'Policy': policyJson,
-            'VisibilityTimeout': str(visibilityTimeoutSecs)
-        }
+
+        db = DeltaBuild()
+        db.putRequired('KmsMasterKeyId', kmsMasterKeyId)
+        db.putRequiredJson('Policy', policyMap)
+        db.putRequiredString('VisibilityTimeout', visibilityTimeoutSecs)
+        rq = db.required()
         exUrl = self.get_queue_url(queueName)
         if not exUrl:
-            self.create_queue(queueName, reqdMap)
+            self.create_queue(queueName, rq, tags)
             self._utils.sleep(1)
-            return resourceArn
-        
-        exMap = self.get_queue_attributes(exUrl, anames)
-        deltaMap = {}
-        exCanonMap = dict(exMap)
-        exCanonMap['Policy'] = self._utils.to_json(exMap['Policy'])
-        for aname in anames:
-            delta = True
-            if aname in exCanonMap:
-                if exCanonMap[aname] == reqdMap[aname]:
-                    delta = False
-            if delta:
-                deltaMap[aname] = reqdMap[aname]
-
-        if bool(deltaMap):
-            self.set_queue_attributes(exUrl, deltaMap)
+            return resourceArn        
+        rqKeys = db.requiredKeys()
+        exMap = self.get_queue_attributes(exUrl, rqKeys)
+        db.loadExisting(exMap)
+        db.normaliseExistingJson('Policy')
+        delta = db.delta()
+        if delta:
+            self.set_queue_attributes(exUrl, delta)
+        exTags = self.list_queue_tags(exUrl)
+        deltaTags = tags.subtract(exTags)
+        if not deltaTags.isEmpty():
+            self.tag_queue(exUrl, deltaTags)
         return resourceArn
         
 

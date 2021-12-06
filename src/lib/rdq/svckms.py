@@ -46,7 +46,7 @@ class KmsClient:
                 KeySpec="SYMMETRIC_DEFAULT",
                 Description=description,
                 Policy=policyJson,
-                Tags=tags.toList()
+                Tags=tags.toList("Tag")
             )
             return response['KeyMetadata']['Arn']
         except botocore.exceptions.ClientError as e:
@@ -100,13 +100,9 @@ class KmsClient:
             response = self._client.list_resource_tags(
                 KeyId=cmkArn
             )
-            tagdict = {}
-            tagsList = response['Tags']
-            for item in tagsList:
-                tk = item['TagKey']
-                tv = item['TagValue']
-                tagdict[tk] = tv
-            return Tags(tagdict, cmkArn)
+            tags = Tags()
+            tags.updateList(response['Tags'], "Tag")
+            return Tags(tags)
         except botocore.exceptions.ClientError as e:
             raise RdqError(self._utils.fail(e, op, 'CmkArn', cmkArn))
 
@@ -198,7 +194,8 @@ class KmsClient:
             self.enable_key_rotation(exArn)
         exTags = self.list_resource_tags(exArn)
         deltaTags = tags.subtract(exTags)
-        self.tag_resource(exArn, deltaTags)
+        if not deltaTags.isEmpty():
+            self.tag_resource(exArn, deltaTags)
         return exArn
 
     def deleteCMK(self, alias, pendingWindowInDays=7):

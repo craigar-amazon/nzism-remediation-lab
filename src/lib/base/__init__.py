@@ -71,16 +71,18 @@ class Tags:
             logging.error(msg)
             raise ConfigError(msg)
 
-    def updateList(self, rlist):
+    def updateList(self, rlist, prefix=""):
+        kk = "{}Key".format(prefix)
+        kv = "{}Value".format(prefix)
         rmap = dict()
         for rtag in rlist:
             if not (type(rtag) is dict): continue
-            if not ('Key' in rtag): continue
-            if not ('Value' in rtag): continue
-            rkey = rtag['Key']
+            if not (kk in rtag): continue
+            if not (kv in rtag): continue
+            rkey = rtag[kk]
             if not (type(rkey) is str): continue
             if len(rkey) == 0: continue
-            rval = rtag['Value']
+            rval = rtag[kv]
             rmap[rkey] = str(rval)
         self._map.update(rmap)
 
@@ -269,6 +271,9 @@ class DeltaBuild:
     def putRequiredList(self, path, val):
         _update(self._rq, path, normaliseList(val, path))
 
+    def putRequiredString(self, path, val):
+        _update(self._rq, path, normaliseString(val, path))
+
     def loadExisting(self, ex):
         self._ex.update(ex)
 
@@ -307,6 +312,9 @@ class DeltaBuild:
 
     def required(self):
         return dict(self._rq)
+
+    def requiredKeys(self):
+        return list(self._rq.keys())
 
     def delta(self):
         rq = self._rq

@@ -170,13 +170,14 @@ class TestRdq(unittest.TestCase):
         sqsc = SQSClient(profile)
         orgc = OrganizationClient(profile)
 
-        tags = Tags({'ebphase': 'A'})
+        tags = Tags({'Application': 'NZISM Auto Remediation'})
+        tagsB = Tags({'Phase': 'B'})
         sqsCmkDescription = "Encryption for SQS queued events"
         sqsCmkAlias = "queued_events"
         storageServiceNS = policy.serviceNamespaceSQS()
         producerServiceP = policy.principalEventBridge()
         cmkStatements = [ policy.allowCMKForServiceProducer(profile, storageServiceNS, producerServiceP) ]
-        cmkarn = kmsc.declareCMKArn(sqsCmkDescription, sqsCmkAlias, cmkStatements)
+        cmkarn = kmsc.declareCMKArn(sqsCmkDescription, sqsCmkAlias, cmkStatements, tags)
         queueName = 'UnitTestQueue1'
         eventBusName = 'UnitTestBus1'
         ruleName = 'ComplianceChange'
@@ -195,7 +196,7 @@ class TestRdq(unittest.TestCase):
         self.assertEqual(ruleArn, ruleArnExpected)
         sqsStatements = [ policy.allowSQSForServiceProducer(profile, queueName, producerServiceP, ruleArn) ]
         sqsVisibilityTimeoutSecs = 15 * 60
-        sqsArn = sqsc.declareQueueArn(queueName, cmkarn, sqsStatements, sqsVisibilityTimeoutSecs)
+        sqsArn = sqsc.declareQueueArn(queueName, cmkarn, sqsStatements, sqsVisibilityTimeoutSecs, tags)
         sqsArnExpected = profile.getRegionAccountArn('sqs', queueName)
         self.assertEqual(sqsArn, sqsArnExpected)
         ebc.declareEventBusTarget(eventBusName, ruleName, queueName, sqsArn, maxAgeSecs)
@@ -205,7 +206,7 @@ class TestRdq(unittest.TestCase):
         self.assertEqual(ebArn, ebArn1, "Idempotent EventBus")
         ruleArn1 = ebc.declareEventBusRuleArn(eventBusName, ruleName, ruleDescription, eventPattern, tags)
         self.assertEqual(ruleArn, ruleArn1, "Idempotent EventBus Rule")
-        sqsArn1 = sqsc.declareQueueArn(queueName, cmkarn, sqsStatements, (sqsVisibilityTimeoutSecs + 1))
+        sqsArn1 = sqsc.declareQueueArn(queueName, cmkarn, sqsStatements, (sqsVisibilityTimeoutSecs + 1), tagsB)
         self.assertEqual(sqsArn, sqsArn1, "Idempotent Queue")
         ebc.declareEventBusTarget(eventBusName, ruleName, queueName, sqsArn, maxAgeSecs)
         ebc.declareEventBusTarget(eventBusName, ruleName, queueName, sqsArn, (maxAgeSecs + 1))
@@ -261,9 +262,9 @@ class TestRdq(unittest.TestCase):
         ruleArn = ebc.declareEventBusRuleArn(eventBusName, ruleName, ruleDescription, eventPattern, tagsCore)
 
         cmkStatements = [ policy.allowCMKForServiceProducer(profile, policy.serviceNamespaceSQS(), policy.principalEventBridge()) ]
-        cmkarn = kmsc.declareCMKArn(sqsCmkDescription, sqsCmkAlias, cmkStatements)
+        cmkarn = kmsc.declareCMKArn(sqsCmkDescription, sqsCmkAlias, cmkStatements, tagsCore)
         sqsStatements = [ policy.allowSQSForServiceProducer(profile, queueName, policy.principalEventBridge(), ruleArn) ]
-        sqsArn = sqsc.declareQueueArn(queueName, cmkarn, sqsStatements, sqsVisibilityTimeoutSecs)
+        sqsArn = sqsc.declareQueueArn(queueName, cmkarn, sqsStatements, sqsVisibilityTimeoutSecs, tagsCore)
         ebc.declareEventBusTarget(eventBusName, ruleName, queueName, sqsArn, ebTargetMaxAgeSecs)
         if landingZoneConfig:
             orgId = orgc.getOrganizationId()
@@ -357,7 +358,7 @@ class TestRdq(unittest.TestCase):
 if __name__ == '__main__':
     initLogging(None, 'INFO')
     loader = unittest.TestLoader()
-    loader.testMethodPrefix = "test_cmk"
+    loader.testMethodPrefix = "test_eventBus"
     unittest.main(warnings='default', testLoader = loader)
     # setup_assume_role('746869318262')
     # test_assume_role('119399605612')
