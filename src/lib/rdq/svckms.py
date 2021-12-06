@@ -101,7 +101,7 @@ class KmsClient:
                 KeyId=cmkArn
             )
             tags = Tags()
-            tags.updateList(response['Tags'], "Tag")
+            tags.updateList(response.get('Tags'), "Tag")
             return Tags(tags)
         except botocore.exceptions.ClientError as e:
             raise RdqError(self._utils.fail(e, op, 'CmkArn', cmkArn))

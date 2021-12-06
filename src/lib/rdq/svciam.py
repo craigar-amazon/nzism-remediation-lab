@@ -1,5 +1,6 @@
 import botocore
 
+from lib.base import Tags, DeltaBuild
 from lib.rdq import RdqError
 from lib.rdq.base import ServiceUtils
 
@@ -223,37 +224,48 @@ class IamClient:
         except botocore.exceptions.ClientError as e:
             raise RdqError(self._utils.fail(e, op, 'RoleName', roleName, 'PolicyName', policyName))
 
-    def create_role_arn(self, roleName, roleDescription, trustPolicyJson, rolePath, maxSessionSecs):
+    def create_role_arn(self, roleName, rolePath, rqUpdate, rqTrust, tags):
         op = 'create_role'
         try:
             response = self._client.create_role(
                 Path=rolePath,
                 RoleName=roleName,
-                AssumeRolePolicyDocument=trustPolicyJson,
-                Description=roleDescription,
-                MaxSessionDuration=maxSessionSecs
+                AssumeRolePolicyDocument=rqTrust['AssumeRolePolicyDocument'],
+                Description=rqUpdate['Description'],
+                MaxSessionDuration=rqUpdate['MaxSessionDuration'],
+                Tags=tags.toList()
             )
             return response['Role']['Arn']
         except botocore.exceptions.ClientError as e:
             raise RdqError(self._utils.fail(e, op, 'RoleName', roleName))
 
-    def update_role(self, roleName, roleDescription, maxSessionSecs):
+    def update_role(self, roleName, rqUpdate):
         op = 'update_role'
         try:
             self._client.update_role(
                 RoleName=roleName,
-                Description=roleDescription,
-                MaxSessionDuration=maxSessionSecs
+                Description=rqUpdate['Description'],
+                MaxSessionDuration=rqUpdate['MaxSessionDuration']
             )
         except botocore.exceptions.ClientError as e:
             raise RdqError(self._utils.fail(e, op, 'RoleName', roleName))
 
-    def update_assume_role_policy(self, roleName, trustPolicyJson):
+    def tag_role(self, roleName, tags):
+        op = 'tag_role'
+        try:
+            self._client.tag_role(
+                RoleName=roleName,
+                Tags=tags.toList()
+            )
+        except botocore.exceptions.ClientError as e:
+            raise RdqError(self._utils.fail(e, op, 'RoleName', roleName))
+
+    def update_assume_role_policy(self, roleName, rqTrust):
         op = 'update_role'
         try:
             self._client.update_assume_role_policy(
                 RoleName=roleName,
-                PolicyDocument=trustPolicyJson
+                PolicyDocument=rqTrust['AssumeRolePolicyDocument']
             )
         except botocore.exceptions.ClientError as e:
             raise RdqError(self._utils.fail(e, op, 'RoleName', roleName))
@@ -327,25 +339,33 @@ class IamClient:
     def getRole(self, roleName):
         return self.get_role(roleName)
 
-
-    def declareRoleArn(self, roleName, roleDescription, trustPolicyMap, rolePath='/', maxSessionSecs=3600):
-        reqdTrustPolicyJson = self._utils.to_json(trustPolicyMap)
+    def declareRoleArn(self, roleName, roleDescription, trustPolicyMap, tags, rolePath='/', maxSessionSecs=3600):
+        dbUpdate = DeltaBuild()
+        dbUpdate.putRequired('Description', roleDescription)
+        dbUpdate.putRequired('MaxSessionDuration', maxSessionSecs)
+        rqUpdate = dbUpdate.required()
+        dbTrust = DeltaBuild()
+        dbTrust.putRequiredJson('AssumeRolePolicyDocument', trustPolicyMap)
+        rqTrust = dbTrust.required()
         exRole = self.get_role(roleName)
         if not exRole:
             rolePathCanon = _canon_path(rolePath)
-            newArn = self.create_role_arn(roleName, roleDescription, reqdTrustPolicyJson, rolePathCanon, maxSessionSecs)
+            newArn = self.create_role_arn(roleName, rolePathCanon, rqUpdate, rqTrust, tags)
             return newArn
-
         exArn = exRole['Arn']
-        exDescription = exRole['Description']
-        exMaxSession = exRole['MaxSessionDuration']
-        if (exDescription != roleDescription) or (exMaxSession != maxSessionSecs):
-            self.update_role(roleName, roleDescription, maxSessionSecs)
-
-        exTrustPolicyJson = self._utils.to_json(exRole['AssumeRolePolicyDocument'])
-        if exTrustPolicyJson != reqdTrustPolicyJson:
-            self.update_assume_role_policy(roleName, reqdTrustPolicyJson)
-
+        dbUpdate.loadExisting(exRole)
+        deltaUpdate = dbUpdate.delta()
+        if deltaUpdate:
+            self.update_role(roleName, rqUpdate)
+        dbTrust.loadExisting(exRole)
+        dbTrust.normaliseExistingJson('AssumeRolePolicyDocument')
+        deltaTrust = dbTrust.delta()
+        if deltaTrust:
+            self.update_assume_role_policy(roleName, rqTrust)
+        exTags = Tags(exRole.get('Tags'), roleName)
+        deltaTags = tags.subtract(exTags)
+        if not deltaTags.isEmpty():
+            self.tag_role(roleName, deltaTags)
         return exArn
 
 

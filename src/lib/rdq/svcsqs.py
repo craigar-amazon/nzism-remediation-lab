@@ -56,7 +56,7 @@ class SQSClient:
             response = self._client.list_queue_tags(
                 QueueUrl=queueUrl
             )
-            return Tags(response['Tags'], queueUrl)
+            return Tags(response.get('Tags'), queueUrl)
         except botocore.exceptions.ClientError as e:
             raise RdqError(self._utils.fail(e, op, 'QueueUrl', queueUrl))
 

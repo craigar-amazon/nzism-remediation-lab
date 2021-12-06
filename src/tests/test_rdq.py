@@ -67,17 +67,19 @@ class TestRdq(unittest.TestCase):
     def test_role_declare(self):
         profile = Profile()
         iam = IamClient(profile)
+        tags = Tags({'Application': 'NZISM Auto Remediation'})
+        tagsB = Tags({'Phase': 'B'})
         roleName = 'TestComplianceChangeConsumerLambdaRole'
         expectedRoleArn = profile.getGlobalAccountArn('iam', "role/{}".format(roleName))
         roleDescription = 'Compliance change queue lambda consumer role'
         lambdaTrustPolicy = policy.trustLambda()
         trustPolicy2 = policy.trustEventBridge()
         roleDescription2 = 'Compliance change SQS queue Lambda consumer role'
-        roleArn1 = iam.declareRoleArn(roleName, roleDescription, lambdaTrustPolicy)
+        roleArn1 = iam.declareRoleArn(roleName, roleDescription, lambdaTrustPolicy, tags)
         assert roleArn1 == expectedRoleArn
-        roleArn2 = iam.declareRoleArn(roleName, roleDescription, lambdaTrustPolicy)
+        roleArn2 = iam.declareRoleArn(roleName, roleDescription, lambdaTrustPolicy, tags)
         assert roleArn2 == expectedRoleArn
-        roleArn3 = iam.declareRoleArn(roleName, roleDescription2, trustPolicy2)
+        roleArn3 = iam.declareRoleArn(roleName, roleDescription2, trustPolicy2, tagsB)
         assert roleArn3 == expectedRoleArn
         iam.deleteRole(roleName)
         assert not iam.getRole(roleName)
@@ -85,6 +87,7 @@ class TestRdq(unittest.TestCase):
     def test_role_build(self):
         profile = Profile()
         iam = IamClient(profile)
+        tags = Tags({'Application': 'NZISM Auto Remediation'})
         lambdaPolicyName = policy.awsLambdaBasicExecution()
         roleName = 'ComplianceChangeConsumerLambdaRole'
         expectedRoleArn = profile.getGlobalAccountArn('iam', "role/{}".format(roleName))
@@ -92,7 +95,7 @@ class TestRdq(unittest.TestCase):
         lambdaPolicyArn = iam.declareAwsPolicyArn(lambdaPolicyName)
         lambdaPolicyArn1 = iam.declareAwsPolicyArn('AWSLambdaSQSQueueExecutionRole')
         lambdaTrustPolicy = policy.trustLambda()
-        roleArn1 = iam.declareRoleArn(roleName, roleDescription, lambdaTrustPolicy)
+        roleArn1 = iam.declareRoleArn(roleName, roleDescription, lambdaTrustPolicy, tags)
         assert roleArn1 == expectedRoleArn
         iam.declareManagedPoliciesForRole(roleName, [lambdaPolicyArn])
         iam.declareManagedPoliciesForRole(roleName, [lambdaPolicyArn, lambdaPolicyArn1])
@@ -114,6 +117,7 @@ class TestRdq(unittest.TestCase):
         profile = Profile()
         iamc = IamClient(profile)
         lambdac = LambdaClient(profile)
+        tags = Tags({'Application': 'NZISM Auto Remediation'})
         lambdaPolicyArn = iamc.declareAwsPolicyArn(policy.awsLambdaBasicExecution())
         lambdaTrustPolicy = policy.trustLambda()
         roleDescription = 'UnitTest1 Lambda Role'
@@ -129,15 +133,15 @@ class TestRdq(unittest.TestCase):
         iamc.deleteRole(roleName)
         lambdac.deleteFunction(functionName)
         expectedLambdaArn = profile.getRegionAccountArn('lambda', "function:{}".format(functionName))
-        roleArn = iamc.declareRoleArn(roleName, roleDescription, lambdaTrustPolicy)
+        roleArn = iamc.declareRoleArn(roleName, roleDescription, lambdaTrustPolicy, tags)
         iamc.declareManagedPoliciesForRole(roleName, [lambdaPolicyArn])
-        lambdaArn = lambdac.declareFunctionArn(functionName, functionDescription, roleArn, functionCfg, codeZip)
+        lambdaArn = lambdac.declareFunctionArn(functionName, functionDescription, roleArn, functionCfg, codeZip, tags)
         assert lambdaArn == expectedLambdaArn
         functionDescriptionDelta1 = functionDescription + " Delta1"
-        lambdaArn1 = lambdac.declareFunctionArn(functionName, functionDescriptionDelta1, roleArn, functionCfg, codeZip)
+        lambdaArn1 = lambdac.declareFunctionArn(functionName, functionDescriptionDelta1, roleArn, functionCfg, codeZip, tags)
         assert lambdaArn1 == expectedLambdaArn
         codeZipDelta1 = codeLoader.getTestCode('SimpleCredentialCheck')
-        lambdaArn2 = lambdac.declareFunctionArn(functionName, functionDescriptionDelta1, roleArn, functionCfg, codeZipDelta1)
+        lambdaArn2 = lambdac.declareFunctionArn(functionName, functionDescriptionDelta1, roleArn, functionCfg, codeZipDelta1, tags)
         assert lambdaArn2 == expectedLambdaArn
         functionIn = {
             'source': "unit-test"
@@ -272,7 +276,7 @@ class TestRdq(unittest.TestCase):
         else:
             ebc.declareEventBusPublishPermissionForAccount(eventBusName, profile.accountId)
         lambdaPolicyArn = iamc.declareAwsPolicyArn(policy.awsLambdaBasicExecution())
-        roleArn = iamc.declareRoleArn(lambdaRoleName, lambdaRoleDescription, policy.trustLambda())
+        roleArn = iamc.declareRoleArn(lambdaRoleName, lambdaRoleDescription, policy.trustLambda(), tagsCore)
         iamc.declareManagedPoliciesForRole(lambdaRoleName, [lambdaPolicyArn])
         policyMapSQS = policy.permissions([policy.allowConsumeSQS(sqsArn), policy.allowDecryptCMK(cmkarn)])
         remediationLambdaNamePattern = "function:{}".format(cfgInstaller.ruleFunctionName("*"))
@@ -358,7 +362,7 @@ class TestRdq(unittest.TestCase):
 if __name__ == '__main__':
     initLogging(None, 'INFO')
     loader = unittest.TestLoader()
-    loader.testMethodPrefix = "test_eventBus"
+    loader.testMethodPrefix = "test_dispatcher"
     unittest.main(warnings='default', testLoader = loader)
     # setup_assume_role('746869318262')
     # test_assume_role('119399605612')

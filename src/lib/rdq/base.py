@@ -53,6 +53,10 @@ class ServiceUtils:
         erc = e.response['Error']['Code']
         return (erc == 'ResourceConflictException')
 
+    def is_resource_in_use(self, e):
+        erc = e.response['Error']['Code']
+        return (erc == 'ResourceInUseException')
+
     def is_operation_in_progress(self, e):
         erc = e.response['Error']['Code']
         return (erc == 'OperationInProgressException')
@@ -115,6 +119,12 @@ class ServiceUtils:
         canRetry = self.retry(tracker) and self.is_resource_conflict(e)
         if canRetry:
             logging.info("Retry possible after resource conflict error | Detail: %s", e)
+        return canRetry
+
+    def retry_resource_in_use(self, e, tracker):
+        canRetry = self.retry(tracker) and self.is_resource_in_use(e)
+        if canRetry:
+            logging.info("Retry possible after resource in-use error | Detail: %s", e)
         return canRetry
 
     def retry_operation_in_progress(self, e, tracker):

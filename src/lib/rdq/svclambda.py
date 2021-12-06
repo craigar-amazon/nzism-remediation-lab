@@ -258,12 +258,18 @@ class LambdaClient:
 
     def delete_event_source_mapping(self, uuid):
         op = 'delete_event_source_mapping'
-        try:
-            self._client.delete_event_source_mapping(
-                UUID=uuid
-            )
-        except botocore.exceptions.ClientError as e:
-            raise RdqError(self._utils.fail(e, op, 'UUID', uuid))
+        tracker = self._utils.init_tracker(op)
+        while True:
+            try:
+                self._client.delete_event_source_mapping(
+                    UUID=uuid
+                )
+            except botocore.exceptions.ClientError as e:
+                if self._utils.is_resource_not_found(e): return
+                if self._utils.retry_resource_in_use(e, tracker):
+                    tracker = self._utils.backoff(tracker)
+                    continue
+                raise RdqError(self._utils.fail(e, op, 'UUID', uuid))
 
 
     # Allow lambda:InvokeFunction

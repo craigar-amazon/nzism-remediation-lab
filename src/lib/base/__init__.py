@@ -57,7 +57,7 @@ class Tags:
         return self._map.get(kwd)
 
     def update(self, tags, context=None):
-        if tags is None: return
+        if not tags: return
         if isinstance(tags, Tags):
             self.updateDict(tags._map)
         elif type(tags) is list:
@@ -72,6 +72,7 @@ class Tags:
             raise ConfigError(msg)
 
     def updateList(self, rlist, prefix=""):
+        if not rlist: return
         kk = "{}Key".format(prefix)
         kv = "{}Value".format(prefix)
         rmap = dict()
@@ -87,6 +88,7 @@ class Tags:
         self._map.update(rmap)
 
     def updateDict(self, rdict):
+        if not rdict: return
         for kwd in rdict:
             self._map[kwd] = str(rdict[kwd])
 
