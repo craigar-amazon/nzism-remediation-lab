@@ -154,12 +154,13 @@ class TestRdq(unittest.TestCase):
         sqsCmkDescription = "Encryption for SQS queued events"
         sqsCmkAlias = "queued_events"
         profile = Profile()
+        tags = Tags({'Application': 'NZISM Auto Remediation'})
         storageServiceNS = policy.serviceNamespaceSQS()
         producerServiceP = policy.principalEventBridge()
         cmkStatements = [ policy.allowCMKForServiceProducer(profile, storageServiceNS, producerServiceP) ]
         kmsc = KmsClient(profile)
     #    kmsc.deleteCMK(sqsCmkAlias)
-        cmkarn1 = kmsc.declareCMKArn(sqsCmkDescription, sqsCmkAlias, cmkStatements)
+        cmkarn1 = kmsc.declareCMKArn(sqsCmkDescription, sqsCmkAlias, cmkStatements, tags)
         assert cmkarn1
 
     def test_eventBus(self):
@@ -169,6 +170,7 @@ class TestRdq(unittest.TestCase):
         sqsc = SQSClient(profile)
         orgc = OrganizationClient(profile)
 
+        tags = Tags({'ebphase': 'A'})
         sqsCmkDescription = "Encryption for SQS queued events"
         sqsCmkAlias = "queued_events"
         storageServiceNS = policy.serviceNamespaceSQS()
@@ -187,9 +189,9 @@ class TestRdq(unittest.TestCase):
         ebArnExpected = profile.getRegionAccountArn('events', "event-bus/{}".format(eventBusName))
         ruleArnExpected = profile.getRegionAccountArn('events', "rule/{}/{}".format(eventBusName, ruleName))
         orgId = orgc.getOrganizationId()
-        ebArn = ebc.declareEventBusArn(eventBusName)
+        ebArn = ebc.declareEventBusArn(eventBusName, tags)
         self.assertEqual(ebArn, ebArnExpected)
-        ruleArn = ebc.declareEventBusRuleArn(eventBusName, ruleName, ruleDescription, eventPattern)
+        ruleArn = ebc.declareEventBusRuleArn(eventBusName, ruleName, ruleDescription, eventPattern, tags)
         self.assertEqual(ruleArn, ruleArnExpected)
         sqsStatements = [ policy.allowSQSForServiceProducer(profile, queueName, producerServiceP, ruleArn) ]
         sqsVisibilityTimeoutSecs = 15 * 60
@@ -199,11 +201,16 @@ class TestRdq(unittest.TestCase):
         ebc.declareEventBusTarget(eventBusName, ruleName, queueName, sqsArn, maxAgeSecs)
         ebc.declareEventBusPublishPermissionForOrganization(eventBusName, orgId)
 
-        ebArn1 = ebc.declareEventBusArn(eventBusName)
+        ebArn1 = ebc.declareEventBusArn(eventBusName, tags)
         self.assertEqual(ebArn, ebArn1, "Idempotent EventBus")
+        ruleArn1 = ebc.declareEventBusRuleArn(eventBusName, ruleName, ruleDescription, eventPattern, tags)
+        self.assertEqual(ruleArn, ruleArn1, "Idempotent EventBus Rule")
         sqsArn1 = sqsc.declareQueueArn(queueName, cmkarn, sqsStatements, (sqsVisibilityTimeoutSecs + 1))
         self.assertEqual(sqsArn, sqsArn1, "Idempotent Queue")
+        ebc.declareEventBusTarget(eventBusName, ruleName, queueName, sqsArn, maxAgeSecs)
         ebc.declareEventBusTarget(eventBusName, ruleName, queueName, sqsArn, (maxAgeSecs + 1))
+
+        print("Done")
 
         sqsc.deleteQueue(queueName)
         ebc.deleteEventBus(eventBusName)
@@ -250,8 +257,8 @@ class TestRdq(unittest.TestCase):
         isLandingZoneDiscoveryEnabled = discover.isLandingZoneDiscoveryEnabled()
         landingZoneConfig = discover.discoverLandingZone(profile)
 
-        ebc.declareEventBusArn(eventBusName)
-        ruleArn = ebc.declareEventBusRuleArn(eventBusName, ruleName, ruleDescription, eventPattern)
+        ebc.declareEventBusArn(eventBusName, tagsCore)
+        ruleArn = ebc.declareEventBusRuleArn(eventBusName, ruleName, ruleDescription, eventPattern, tagsCore)
 
         cmkStatements = [ policy.allowCMKForServiceProducer(profile, policy.serviceNamespaceSQS(), policy.principalEventBridge()) ]
         cmkarn = kmsc.declareCMKArn(sqsCmkDescription, sqsCmkAlias, cmkStatements)
@@ -350,7 +357,7 @@ class TestRdq(unittest.TestCase):
 if __name__ == '__main__':
     initLogging(None, 'INFO')
     loader = unittest.TestLoader()
-    loader.testMethodPrefix = "test_dispatcher"
+    loader.testMethodPrefix = "test_cmk"
     unittest.main(warnings='default', testLoader = loader)
     # setup_assume_role('746869318262')
     # test_assume_role('119399605612')

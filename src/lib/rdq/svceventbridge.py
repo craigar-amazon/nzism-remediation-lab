@@ -1,16 +1,8 @@
 import botocore
+
+from lib.base import DeltaBuild
 from lib.rdq import RdqError
 from lib.rdq.base import ServiceUtils
-
-def _match_target(rq, ex):
-    if rq['Arn'] != ex['Arn']: return False
-    if not ('RetryPolicy' in ex): return False
-    rqRetryPolicy = rq['RetryPolicy']
-    exRetryPolicy = ex['RetryPolicy']
-    if not ('MaximumEventAgeInSeconds' in exRetryPolicy): return False
-    if rqRetryPolicy['MaximumEventAgeInSeconds'] != exRetryPolicy['MaximumEventAgeInSeconds']: return False
-    return True
-
 
 class EventBridgeClient:
     def __init__(self, profile):
@@ -30,11 +22,12 @@ class EventBridgeClient:
             if self._utils.is_resource_not_found(e): return None
             raise RdqError(self._utils.fail(e, op, 'EventBusName', eventBusName))
 
-    def create_event_bus_arn(self, eventBusName):
+    def create_event_bus_arn(self, eventBusName, tags):
         op = 'create_event_bus'
         try:
             response = self._client.create_event_bus(
-                Name=eventBusName
+                Name=eventBusName,
+                Tags=tags.toList()
             )
             return response['EventBusArn']
         except botocore.exceptions.ClientError as e:
@@ -91,14 +84,15 @@ class EventBridgeClient:
             raise RdqError(self._utils.fail(e, op, 'EventBusName', eventBusName, 'RuleName', ruleName))
 
     # Allow events:PutRule
-    def put_rule_arn(self, eventBusName, ruleName, ruleDescription, eventPatternJson):
+    def put_rule_arn(self, eventBusName, ruleName, rq, tags):
         op = 'put_rule'
         try:
             response = self._client.put_rule(
                 EventBusName=eventBusName,
                 Name=ruleName,
-                Description=ruleDescription,
-                EventPattern=eventPatternJson
+                Description=rq['Description'],
+                EventPattern=rq['EventPattern'],
+                Tags=tags.toList()
             )
             return response['RuleArn']
         except botocore.exceptions.ClientError as e:
@@ -166,47 +160,39 @@ class EventBridgeClient:
         except botocore.exceptions.ClientError as e:
             raise RdqError(self._utils.fail(e, op, 'EventBusName', eventBusName, 'RuleName', ruleName))
 
-    def declareEventBusArn(self, eventBusName):
+    def declareEventBusArn(self, eventBusName, tags):
         exEventBus = self.describe_event_bus(eventBusName)
         if not exEventBus:
-             return self.create_event_bus_arn(eventBusName)
+             return self.create_event_bus_arn(eventBusName, tags)
         return exEventBus['Arn']
 
-    def declareEventBusRuleArn(self, eventBusName, ruleName, ruleDescription, eventPatternMap):
+    def declareEventBusRuleArn(self, eventBusName, ruleName, ruleDescription, eventPatternMap, tags):
+        db = DeltaBuild()
+        db.putRequired('Description', ruleDescription)
+        db.putRequiredJson('EventPattern', eventPatternMap)
+        rq = db.required()
         exRule = self.describe_rule(eventBusName, ruleName)
-        reqd = {
-            'Description': ruleDescription,
-            'EventPattern': self._utils.to_json(eventPatternMap)
-        }
-        delta = False
         if exRule:
-            ex = dict(exRule)
-            ex['EventPattern'] = self._utils.to_json(exRule['EventPattern'])
-            for rk in reqd:
-                if reqd[rk] != ex[rk]:
-                    delta = True
-                    break
-        else:
-            delta = True
-        if not delta: return exRule['Arn']
-        return self.put_rule_arn(eventBusName, ruleName, reqd['Description'], reqd['EventPattern'])
-
-    def declareEventBusTarget(self, eventBusName, ruleName, targetId, targetArn, maxAgeSeconds):        
-        reqdTarget = {
-            'Id': targetId,
-            'Arn': targetArn,
-            'RetryPolicy':  {
-                'MaximumEventAgeInSeconds': maxAgeSeconds
-            }
-        }
-        exTarget = self.find_target(eventBusName, ruleName, targetId)
-        delta = False
-        if exTarget:
-            delta = not _match_target(reqdTarget, exTarget)
-        else:
-            delta = True
+            exArn = exRule['Arn']
+            db.loadExisting(exRule)
+            db.normaliseExistingJson('EventPattern')
+        delta = db.delta()
         if delta:
-            self.put_targets(eventBusName, ruleName, [reqdTarget])
+            exArn = self.put_rule_arn(eventBusName, ruleName, rq, tags)
+        return exArn
+
+    def declareEventBusTarget(self, eventBusName, ruleName, targetId, targetArn, maxAgeSeconds):
+        db = DeltaBuild()
+        db.putRequired('Id', targetId)
+        db.putRequired('Arn', targetArn)
+        db.putRequired('RetryPolicy.MaximumEventAgeInSeconds', maxAgeSeconds)
+        rq = db.required()
+        exTarget = self.find_target(eventBusName, ruleName, targetId)
+        if exTarget:
+            db.loadExisting(exTarget)
+        delta = db.delta()
+        if delta:
+            self.put_targets(eventBusName, ruleName, [rq])
         return delta
 
     def declareEventBusPublishPermissionForAccount(self, eventBusName, accountId):

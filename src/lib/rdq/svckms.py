@@ -1,5 +1,6 @@
 import botocore
 
+from lib.base import Tags
 from lib.rdq import RdqError
 from lib.rdq.base import ServiceUtils
 
@@ -38,13 +39,14 @@ class KmsClient:
             if self._utils.is_resource_not_found(e): return None
             raise RdqError(self._utils.fail(e, op, 'KeyId', keyId))
 
-    def create_key_arn(self, description, policyJson):
+    def create_key_arn(self, description, policyJson, tags):
         op = 'create_key'
         try:
             response = self._client.create_key(
                 KeySpec="SYMMETRIC_DEFAULT",
                 Description=description,
-                Policy=policyJson
+                Policy=policyJson,
+                Tags=tags.toList()
             )
             return response['KeyMetadata']['Arn']
         except botocore.exceptions.ClientError as e:
@@ -92,6 +94,21 @@ class KmsClient:
         except botocore.exceptions.ClientError as e:
             raise RdqError(self._utils.fail(e, op, 'CmkArn', cmkArn))
 
+    def list_resource_tags(self, cmkArn):
+        op = 'list_resource_tags'
+        try:
+            response = self._client.list_resource_tags(
+                KeyId=cmkArn
+            )
+            tagdict = {}
+            tagsList = response['Tags']
+            for item in tagsList:
+                tk = item['TagKey']
+                tv = item['TagValue']
+                tagdict[tk] = tv
+            return Tags(tagdict, cmkArn)
+        except botocore.exceptions.ClientError as e:
+            raise RdqError(self._utils.fail(e, op, 'CmkArn', cmkArn))
 
     def update_key_description(self, cmkArn, description):
         op = 'update_key_description'
@@ -99,6 +116,16 @@ class KmsClient:
             self._client.update_key_description(
                 KeyId=cmkArn,
                 Description=description
+            )
+        except botocore.exceptions.ClientError as e:
+            raise RdqError(self._utils.fail(e, op, 'CmkArn', cmkArn))
+
+    def tag_resource(self, cmkArn, tags):
+        op = 'tag_resource'
+        try:
+            self._client.tag_resource(
+                KeyId=cmkArn,
+                Tags=tags.toList("Tag")
             )
         except botocore.exceptions.ClientError as e:
             raise RdqError(self._utils.fail(e, op, 'CmkArn', cmkArn))
@@ -135,7 +162,7 @@ class KmsClient:
             if self._utils.is_resource_not_found(e): return False
             raise RdqError(self._utils.fail(e, op, 'AliasName', canonAlias))
 
-    def declareCMKArn(self, description, alias, policyStatements):
+    def declareCMKArn(self, description, alias, policyStatements, tags):
         statements = [self.policy_statement_default()]
         statements.extend(policyStatements)
         policyMap = self._utils.policy_map(statements)
@@ -155,7 +182,7 @@ class KmsClient:
         else:
             createReqd = True
         if createReqd:
-            newArn = self.create_key_arn(description, reqdPolicyJson)
+            newArn = self.create_key_arn(description, reqdPolicyJson, tags)
             self.create_alias(canonAlias, newArn)
             self.enable_key_rotation(newArn)
             return newArn
@@ -169,6 +196,9 @@ class KmsClient:
         isRotationEnabled = self.get_key_rotation_status(exArn)
         if not isRotationEnabled:
             self.enable_key_rotation(exArn)
+        exTags = self.list_resource_tags(exArn)
+        deltaTags = tags.subtract(exTags)
+        self.tag_resource(exArn, deltaTags)
         return exArn
 
     def deleteCMK(self, alias, pendingWindowInDays=7):

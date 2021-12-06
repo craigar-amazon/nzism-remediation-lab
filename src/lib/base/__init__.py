@@ -109,15 +109,16 @@ class Tags:
         newTags._map = result
         return newTags
 
-    def toList(self):
+    def toList(self, prefix=""):
+        kk = "{}Key".format(prefix)
+        kv = "{}Value".format(prefix)
         sk = sorted(self._map.keys())
         r = list()
         for k in sk:
             v = self._map[k]
-            tag = {
-                'Key': k,
-                'Value': v
-            }
+            tag = {}
+            tag[kk] = k
+            tag[kv] = v
             r.append(tag)
         return r
 
