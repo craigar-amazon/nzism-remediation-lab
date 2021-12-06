@@ -1,6 +1,6 @@
 import botocore
 
-from lib.base import DeltaBuild
+from lib.base import Tags, DeltaBuild
 from lib.rdq import RdqError
 from lib.rdq.base import ServiceUtils
 
@@ -145,7 +145,7 @@ class CfnClient:
             raise RdqError(self._utils.fail(e, op, 'StackName', stackName))
 
 
-    def create_stackset_id(self, stackSetName, callAs, rq):
+    def create_stackset_id(self, stackSetName, callAs, rq, tags):
         op = 'create_stack_set'
         try:
             response = self._client.create_stack_set(
@@ -154,14 +154,15 @@ class CfnClient:
                 TemplateBody=rq['TemplateBody'],
                 PermissionModel=rq['PermissionModel'],
                 AutoDeployment=rq['AutoDeployment'],
-                Capabilities = rq['Capabilities'],
+                Capabilities=rq['Capabilities'],
+                Tags=tags.toList(),
                 CallAs=callAs
             )
             return response['StackSetId']
         except botocore.exceptions.ClientError as e:
             raise RdqError(self._utils.fail(e, op, 'StackSetName', stackSetName, 'CallAs', callAs))
 
-    def update_stackset_id(self, stackSetName, callAs, rq):
+    def update_stackset_id(self, stackSetName, callAs, rq, tags):
         op = 'update_stack_set'
         operationId = self._utils.new_operation_id()
         tracker = self._utils.init_tracker(op, operationId)
@@ -174,6 +175,7 @@ class CfnClient:
                     PermissionModel=rq['PermissionModel'],
                     AutoDeployment=rq['AutoDeployment'],
                     Capabilities = rq['Capabilities'],
+                    Tags=tags.toList(),
                     OperationId=operationId,
                     CallAs=callAs
                 )
@@ -324,10 +326,10 @@ class CfnClient:
         return self.get_completed_stack(stackName, maxSecs)
 
 
-    def declareStackSet(self, stackSetName, templateMap, stackSetDescription, orgunitids, regions, forOrganization=True):
+    def declareStackSet(self, stackSetName, templateMap, description, tags, orgunitids, regions, forOrganization=True):
         callAs = _callAs(forOrganization)
         db = DeltaBuild()
-        db.putRequired('Description', stackSetDescription)
+        db.putRequired('Description', description)
         db.putRequiredJson('TemplateBody', templateMap)
         db.putRequired('PermissionModel', 'SERVICE_MANAGED')
         db.putRequired('AutoDeployment.Enabled', True)
@@ -341,17 +343,19 @@ class CfnClient:
             db.normaliseExistingJson('TemplateBody')
             db.normaliseExistingList('Capabilities')
             delta = db.delta()
-            if delta:
+            exTags = Tags(ex.get('Tags'))
+            deltaTags = tags.subtract(exTags)
+            if not ((len(delta) == 0) and deltaTags.isEmpty()):
                 op = 'ApplyStackSetDelta'
                 self._utils.info(op, 'StackSetName', stackSetName, "Updating Stack Set", "Delta", delta)
                 if self.is_running_stack_set_operations(stackSetName, callAs, 600):
                     self._utils.warning(op, 'StackSetName', stackSetName, "Previous Stack Set Operations Still Running", "Delta", delta)
-                operationId = self.update_stackset_id(stackSetName, callAs, rq)
+                operationId = self.update_stackset_id(stackSetName, callAs, rq, tags)
             else:
                 operationId = None
         else:
             self.wait_on_running_stack_set_operations(stackSetName, callAs, 600)
-            stacksetId = self.create_stackset_id(stackSetName, callAs, rq)
+            stacksetId = self.create_stackset_id(stackSetName, callAs, rq, tags)
             self.wait_on_running_stack_set_operations(stackSetName, callAs, 600)
             operationId = self.create_stack_instances(stackSetName, callAs, orgunitids, regions)
         return {

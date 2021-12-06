@@ -312,6 +312,7 @@ class TestRdq(unittest.TestCase):
 
 
     def test_stackset(self):
+        tagsCore = Tags(cfgInstaller.coreResourceTags(), "coreResourceTags")
         stackSetName = "UnitTest1StackSet"
         stackSetDescription = "UnitTest1 Stack Set"
 
@@ -343,12 +344,12 @@ class TestRdq(unittest.TestCase):
         profile = Profile()
         cfnc = CfnClient(profile)
         cfnc.deleteStackSet(stackSetName, orgIds, regions)
-        ss0 = cfnc.declareStackSet(stackSetName, templateMap, stackSetDescription, orgIds, regions)
+        ss0 = cfnc.declareStackSet(stackSetName, templateMap, stackSetDescription, tagsCore, orgIds, regions)
         self.assertTrue(len(ss0) == 2)
-        ss1 = cfnc.declareStackSet(stackSetName, templateMap, stackSetDescription, orgIds, regions)
+        ss1 = cfnc.declareStackSet(stackSetName, templateMap, stackSetDescription, tagsCore, orgIds, regions)
         self.assertTrue(len(ss1) == 2)
         self.assertIsNone(ss1['OperationId'])
-        ss2 = cfnc.declareStackSet(stackSetName, templateMap, (stackSetDescription + ".1"), orgIds, regions)
+        ss2 = cfnc.declareStackSet(stackSetName, templateMap, (stackSetDescription + ".1"), tagsCore, orgIds, regions)
         self.assertTrue(len(ss2) == 2)
         op2 = ss2['OperationId']
         summary2 = cfnc.getStackSetOperation(stackSetName, op2)
@@ -362,7 +363,7 @@ class TestRdq(unittest.TestCase):
 if __name__ == '__main__':
     initLogging(None, 'INFO')
     loader = unittest.TestLoader()
-    loader.testMethodPrefix = "test_dispatcher"
+    loader.testMethodPrefix = "test_stackset"
     unittest.main(warnings='default', testLoader = loader)
     # setup_assume_role('746869318262')
     # test_assume_role('119399605612')
