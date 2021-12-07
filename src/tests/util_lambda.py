@@ -3,7 +3,8 @@ from lib.rdq.svciam import IamClient
 from lib.rdq.svclambda import LambdaClient
 import lib.rdq.policy as policy
 import cmds.codeLoader as codeLoader
-import cfg.installer as cfg
+import cfg.installer as cfginstall
+import cfg.rules as cfgrules
 
 def targetAccountId():
     return '119399605612'
@@ -13,6 +14,21 @@ def dispatchAccountId():
 
 def targetRoleNameDirect():
     return 'UnitTestTargetRole'
+
+def conformancePackName():
+    return 'UnitTestConformancePack'
+
+def manualTagName():
+    return 'ManualRemediation'
+
+def autoResourceTags():
+    return {
+        'AutoDeployed': 'True',
+        'AutoDeploymentReason': 'NZISM Conformance'
+    }
+
+def stackNamePattern():
+    return "NZISM-AutoDeployed-{}"
 
 def targetRoleNameCT():
     return 'aws-controltower-AdministratorExecutionRole'
@@ -46,8 +62,11 @@ def run_local(preview, configRuleName, resourceType, resourceId, setupFunction, 
     roleName = 'LOCAL'
     event = {
         'preview': preview,
-        'conformancePackName': 'UnitTest',
+        'conformancePackName': conformancePackName(),
         'configRuleName': configRuleName,
+        'manualTagName': manualTagName(),
+        'autoResourceTags': autoResourceTags(),
+        'stackNamePattern': stackNamePattern(),
         'target': {
             'awsAccountId': profile.accountId,
             'awsRegion': 'ap-southeast-2',
@@ -69,8 +88,11 @@ def run_direct(preview, configRuleName, resourceType, resourceId, setupFunction,
     roleName = targetRoleNameDirect()
     event = {
         'preview': preview,
-        'conformancePackName': 'UnitTest',
+        'conformancePackName': conformancePackName(),
         'configRuleName': configRuleName,
+        'manualTagName': manualTagName(),
+        'autoResourceTags': autoResourceTags(),
+        'stackNamePattern': stackNamePattern(),
         'target': {
             'awsAccountId': toAccountId,
             'awsRegion': 'ap-southeast-2',
@@ -96,8 +118,11 @@ def run_invoke(preview, configRuleName, resourceType, resourceId, setupFunction,
     targetRoleName = targetRoleNameCT()
     event = {
         'preview': preview,
-        'conformancePackName': 'UnitTest',
+        'conformancePackName': conformancePackName(),
         'configRuleName': configRuleName,
+        'manualTagName': manualTagName(),
+        'autoResourceTags': autoResourceTags(),
+        'stackNamePattern': stackNamePattern(),
         'target': {
             'awsAccountId': toAccountId,
             'awsRegion': 'ap-southeast-2',
@@ -106,7 +131,7 @@ def run_invoke(preview, configRuleName, resourceType, resourceId, setupFunction,
             'resourceId': resourceId
         }
     }
-    functionCfg = cfg.ruleFunctionCfg()
+    functionCfg = cfginstall.ruleFunctionCfg()
     codeZip = codeLoader.getTestCode(codeFolder)
     profile = Profile()
     lambdac = LambdaClient(profile)

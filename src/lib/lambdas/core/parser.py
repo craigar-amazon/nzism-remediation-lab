@@ -128,6 +128,19 @@ def createInvokeList(profile, dispatchList):
             erm = "Cannot remediate account {} without a remediation role".format(targetAccountId)
             logging.error(erm)
             raise ConfigError(erm)
+        manualTagName = cfgrules.manualRemediationTagName(configRuleName, targetAccountId)
+        if not manualTagName:
+            manualTagName = "DoNotAutoRemediate"
+            logging.warning("No manual remediation tag defined for rule %s; will use %s", configRuleName, manualTagName)
+        autoResourceTags = cfgrules.autoResourceTags(configRuleName, targetAccountId)
+        if not autoResourceTags:
+            autoResourceTags = {'AutoDeployed': 'True'}
+            logging.warning("No tags defined for auto-deployed resources by rule %s; will use %s", configRuleName, autoResourceTags)
+        stackNamePattern = cfgrules.stackNamePattern(configRuleName, targetAccountId)
+        if not stackNamePattern:
+            stackNamePattern = conformancePackName + "-AutoDeploy-{}"
+            logging.warning("No stack name pattern defined for auto-deployed stacks by rule %s; will use %s", configRuleName, stackNamePattern)
+
         awsRegion = dispatch['awsRegion']
         resourceType = dispatch['resourceType']
         resourceId = dispatch['resourceId']
@@ -135,6 +148,9 @@ def createInvokeList(profile, dispatchList):
             'preview': isPreview,
             'conformancePackName': conformancePackName,
             'configRuleName': configRuleName,
+            'manualTagName': manualTagName,
+            'autoResourceTags': autoResourceTags,
+            'stackNamePattern': stackNamePattern,
             'target': {
                 'awsAccountId': targetAccountId,
                 'awsRegion': awsRegion,

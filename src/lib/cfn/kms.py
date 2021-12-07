@@ -1,4 +1,5 @@
 import lib.cfn.iam as iam
+from lib.base import Tags
 
 # IAM Policy Actions
 iamEncrypt = "kms:Encrypt*"
@@ -19,11 +20,13 @@ def KeyPolicy(accountId, statementList):
         'Statement': sx
     }
 
-def KMS_Key(description, keyPolicy):
+def KMS_Key(description, keyPolicy, tags :Tags, pendingWindowInDays=7):
     props = {
         'Description': description,
         'EnableKeyRotation': 'true',
-        'KeyPolicy': keyPolicy
+        'KeyPolicy': keyPolicy,
+        'Tags': tags.toList(),
+        'PendingWindowInDays': pendingWindowInDays
     }
     return {
         'Type': "AWS::KMS::Key",

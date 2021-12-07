@@ -46,6 +46,9 @@ class Tags:
     def isEmpty(self):
         return len(self._map) == 0
 
+    def notEmpty(self):
+        return len(self._map) > 0
+
     def put(self, kwd, value):
         self._map[kwd] = str(value)
 

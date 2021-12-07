@@ -10,18 +10,22 @@ def analyzeResponse(functionName, event, response):
         logging.error("%s | Event: %s | Response: %s", msg, event, response)
         raise RetryError(msg)
 
-    reason = 'errorMessage'
-    if reason in payload:
-        erm = payload[reason]
+    erm = payload.get('errorMessage')
+    if erm:
         msg = "Function {} returned error: {}".format(functionName, erm)
         logging.error("%s | Event: %s | Response: %s", msg, event, response)
         raise RetryError(msg)
 
-    reason = 'remediationFailure'
-    if reason in payload:
-        erm = payload[reason]
-        msg = "Function {} returned remediation error: {}".format(functionName, erm)
+    erm = payload.get('remediationFailure')
+    if erm:
+        msg = "Function {} returned remediation failure: {}".format(functionName, erm)
         logging.error("%s | Event: %s", msg, event)
+        raise RetryError(msg)
+
+    erm = payload.get('remediationTimeout')
+    if erm:
+        msg = "Function {} returned remediation timeout: {}".format(functionName, erm)
+        logging.warning("%s | Event: %s", msg, event)
         raise RetryError(msg)
 
     isPreview = event['preview']

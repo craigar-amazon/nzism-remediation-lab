@@ -1,7 +1,7 @@
 import botocore
 
 from lib.base import Tags, DeltaBuild
-from lib.rdq import RdqError
+from lib.rdq import RdqError, RdqTimeout
 from lib.rdq.base import ServiceUtils
 
 def _callAs(forOrganization):
@@ -43,6 +43,7 @@ class CfnClient:
             raise RdqError(self._utils.integrity("Multiple stacks for name", "StackName", stackName, "MatchCount", resultCount))
         except botocore.exceptions.ClientError as e:
             if self._utils.is_resource_not_found(e): return None
+            if self._utils.is_error_code(e, 'ValidationError'): return None
             raise RdqError(self._utils.fail(e, op, 'StackName', stackName))
 
     def describe_stackset(self, stackSetName, callAs):
@@ -96,36 +97,40 @@ class CfnClient:
             raise RdqError(self._utils.fail(e, op, 'StackName', stackName))
 
     #PREVIEW
-    def create_stack_id(self, stackName, rq):
+    def create_stack_id(self, stackName, rq, tags):
         op = 'create_stack'
         args = {
             'StackName': stackName,
-            'Configuration': rq
+            'Configuration': rq,
+            'Tags': tags.toDict()
         }
         if self._utils.preview(op, args): return None
         try:
             response = self._client.create_stack(
                 StackName=stackName,
                 TemplateBody=rq['TemplateBody'],
-                Capabilities = rq['Capabilities']
+                Capabilities = rq['Capabilities'],
+                Tags=tags.toList()
             )
             return response['StackId']
         except botocore.exceptions.ClientError as e:
             raise RdqError(self._utils.fail(e, op, 'StackName', stackName))
 
     #PREVIEW
-    def update_stack(self, stackName, rq):
+    def update_stack(self, stackName, rq, tags):
         op = 'update_stack'
         args = {
             'StackName': stackName,
-            'NewConfiguration': rq
+            'NewConfiguration': rq,
+            'Tags': tags.toDict()
         }
         if self._utils.preview(op, args): return
         try:
             self._client.update_stack(
                 StackName=stackName,
                 TemplateBody=rq['TemplateBody'],
-                Capabilities = rq['Capabilities']
+                Capabilities = rq['Capabilities'],
+                Tags=tags.toList()
             )
         except botocore.exceptions.ClientError as e:
             raise RdqError(self._utils.fail(e, op, 'StackName', stackName))
@@ -251,7 +256,7 @@ class CfnClient:
                 raise RdqError(self._utils.fail(e, op, 'StackSetName', stackSetName, 'CallAs', callAs, 'OrgUnitIds', orgunitids))
 
     def get_completed_stack(self, stackName, maxSecs):
-        op = 'AwaitStackComplation'
+        op = 'AwaitStackCompletion'
         tracker = self._utils.init_tracker(op, maxSecs=maxSecs, policy="ElapsedOnly")
         while True:
             stack = self.describe_stack(stackName)
@@ -260,7 +265,7 @@ class CfnClient:
                 return stack
             self._utils.info(op, 'StackName', stackName, "Waiting for Completion", "Status", status)
             if self._utils.retry(tracker):
-                tracker = self._utils.backoff(tracker, 120)
+                tracker = self._utils.backoff(tracker, 60)
                 continue
             return None
 
@@ -286,16 +291,16 @@ class CfnClient:
         op = 'WaitForRunningStack'
         runningStatus = self.get_completed_stack(stackName, maxSecs)
         if runningStatus:
-            raise RdqError(self._utils.expired(op, 'StackName', stackName, 'Status', runningStatus, 'MaxSecs', maxSecs))
+            raise RdqTimeout(self._utils.expired(op, 'StackName', stackName, 'Status', runningStatus, 'MaxSecs', maxSecs))
 
     def wait_on_running_stack_set_operations(self, stackSetName, callAs, maxSecs):
         op = 'WaitForRunningStackSetOperations'
         isRunning = self.is_running_stack_set_operations(stackSetName, callAs, maxSecs)
         if isRunning:
-            raise RdqError(self._utils.expired(op, 'StackSetName', stackSetName, 'MaxSecs', maxSecs))
+            raise RdqTimeout(self._utils.expired(op, 'StackSetName', stackSetName, 'MaxSecs', maxSecs))
 
     #PREVIEW
-    def declareStack(self, stackName, templateMap):
+    def declareStack(self, stackName, templateMap, tags):
         db = DeltaBuild()
         db.putRequiredJson('TemplateBody', templateMap)
         db.putRequiredList('Capabilities', ['CAPABILITY_NAMED_IAM'])
@@ -309,12 +314,13 @@ class CfnClient:
             db.normaliseExistingJson('TemplateBody')
             db.normaliseExistingList('Capabilities')
             delta = db.delta()
-            if delta:
+            exTags = Tags(ex.get('Tags'))
+            deltaTags = tags.subtract(exTags)
+            if len(delta) > 0 or deltaTags.notEmpty():
                 self.wait_on_running_stack(stackName, 120)
-                self.update_stack(stackName, rq)
+                self.update_stack(stackName, rq, tags)
         else:
-            self.wait_on_running_stack(stackName, 120)
-            stackId = self.create_stack_id(stackName, rq)
+            stackId = self.create_stack_id(stackName, rq, tags)
         return stackId
 
     #PREVIEW
@@ -322,7 +328,7 @@ class CfnClient:
         self.get_completed_stack(stackName, 600)
         self.delete_stack(stackName)
 
-    def getCompletedStack(self, stackName, maxSecs=120):
+    def getCompletedStack(self, stackName, maxSecs=600):
         return self.get_completed_stack(stackName, maxSecs)
 
 
@@ -345,7 +351,7 @@ class CfnClient:
             delta = db.delta()
             exTags = Tags(ex.get('Tags'))
             deltaTags = tags.subtract(exTags)
-            if not ((len(delta) == 0) and deltaTags.isEmpty()):
+            if len(delta) > 0 or deltaTags.notEmpty():
                 op = 'ApplyStackSetDelta'
                 self._utils.info(op, 'StackSetName', stackSetName, "Updating Stack Set", "Delta", delta)
                 if self.is_running_stack_set_operations(stackSetName, callAs, 600):

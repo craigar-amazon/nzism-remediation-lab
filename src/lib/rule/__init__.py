@@ -1,7 +1,9 @@
 import logging
+import json
+import time
 
-from lib.base import initLogging
-from lib.rdq import Profile, RdqError
+from lib.base import initLogging, Tags
+from lib.rdq import Profile, RdqError, RdqTimeout
 
 
 class RuleImplementationError(Exception):
@@ -15,6 +17,23 @@ class RuleImplementationError(Exception):
     def message(self):
         return self._message
 
+class RuleTimeoutError(Exception):
+    def __init__(self, message, task=None):
+        if task:
+            secs = int(task.elapsedSecs)
+            m = "{}; elapsed {} secs".format(message, secs)
+        else:
+            m = message
+        self._message = m
+
+    def __str__(self):
+        return self._message
+    
+    @property
+    def message(self):
+        return self._message
+
+
 def _required(argVal, argName):
     if argVal: return argVal
     erm = "Require a value for {}".format(argName)
@@ -24,6 +43,47 @@ def _required_value(src, propName, defValue=None):
     if defValue: return defValue
     erm = "Missing value for required property {}".format(propName)
     raise RuleImplementationError(erm)
+
+class Task:
+    def __init__(self, props):
+        self._props = props
+        self._autoResourceTags = Tags(props['autoResourceTags'], 'autoResourceTags')
+        self._startedAt = time.time()
+    
+    @property
+    def isPreview(self): return self._props['isPreview']
+
+    @property
+    def accountId(self): return self._props['accountId']
+
+    @property
+    def regionName(self): return self._props['regionName']
+
+    @property
+    def resourceType(self): return self._props['resourceType']
+
+    @property
+    def resourceId(self): return self._props['resourceId']
+
+    @property
+    def conformancePackName(self): return self._props['conformancePackName']
+
+    @property
+    def manualTagName(self): return self._props['manualTagName']
+
+    @property
+    def autoResourceTags(self): return self._autoResourceTags
+
+    @property
+    def stackNamePattern(self): return self._props['stackNamePattern']
+
+    @property
+    def elapsedSecs(self):
+        return time.time() - self._startedAt
+
+    def __str__(self):
+        return json.dumps(self._props)
+    
 
 class RuleMain:
     def __init__(self, logLevelVariable='LOGLEVEL', defaultLevel='INFO'):
@@ -43,7 +103,6 @@ class RuleMain:
         return out[0:64]
 
     def _remediate_imp(self, event):
-        conformancePackName = _required_value(event, 'conformancePackName')
         configRuleName = _required_value(event, 'configRuleName')
         isPreview = _required_value(event, 'preview', True)
         target = _required_value(event, 'target')
@@ -53,6 +112,19 @@ class RuleMain:
         awsAccountId = _required_value(target, 'awsAccountId')
         awsRegion = _required_value(target, 'awsRegion')
         roleName = _required_value(target, 'roleName')
+        taskProps = {
+            'configRuleName': configRuleName,
+            'isPreview': isPreview,
+            'resourceType': resourceType,
+            'resourceId': resourceId,
+            'accountId': awsAccountId,
+            'regionName': awsRegion,
+            'conformancePackName': _required_value(event, 'conformancePackName'),
+            'manualTagName': _required_value(event, 'manualTagName'),
+            'autoResourceTags': _required_value(event, 'autoResourceTags'),
+            'stackNamePattern': _required_value(event, 'stackNamePattern')
+        }
+        task = Task(taskProps)
         sessionName = self._session_name(configRuleName)
         try:
             fromProfile = Profile(regionName=awsRegion)
@@ -61,17 +133,24 @@ class RuleMain:
             else:
                 targetProfile = fromProfile.assumeRole(awsAccountId, roleName, awsRegion, sessionName)
             targetProfile.enablePreview(isPreview)
-            context = {
-                'conformancePackName': conformancePackName
-            }
             previewResponse = {}
-            remediationResponse = handlingMethod(targetProfile, resourceId, context)
+            remediationResponse = handlingMethod(targetProfile, task)
             if targetProfile.isPreviewing:
                 previewResponse = targetProfile.enablePreview(False)
             return {
                 'isPreview': isPreview,
                 'previewResponse': previewResponse,
                 'remediationResponse': remediationResponse
+            }
+        except RuleTimeoutError as e:
+            logging.warning("Timeout in remediation handler. | Cause: %s | Task: %s", e.message, task)
+            return {
+                'remediationTimeout': e.message
+            }
+        except RdqTimeout as e:
+            logging.warning("RdqTimeout in remediation handler. | Cause: %s | Task: %s", e.message, task)
+            return {
+                'remediationTimeout': e.message
             }
         except RdqError as e:
             ectx = {

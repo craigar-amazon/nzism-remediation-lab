@@ -1,8 +1,8 @@
 import unittest
 from lib.base import initLogging
 from lib.rdq import RdqError
-from lib.rdq.svcs3control import S3ControlClient
-from lambdas.test.ApplyS3BPA.lambda_function import lambda_handler
+
+from lambdas.test.EncryptCWL.lambda_function import lambda_handler
 
 import tests.util_lambda as util
 
@@ -10,8 +10,9 @@ def _isPreview():
     return False
 
 def _setupHandler(profile, resourceId):
-    s3c = S3ControlClient(profile)
-    s3c.declarePublicAccessBlock(resourceId, False)
+    return
+    # s3c = S3ControlClient(profile)
+    # s3c.declarePublicAccessBlock(resourceId, False)
 
 def _configRuleName():
     return 'cloudwatch-log-group-encrypted'
@@ -29,7 +30,7 @@ class TestRule(unittest.TestCase):
 
     def test_local(self):
         util.show_reminder_dispatchingAudit()
-        resourceId = util.dispatchAccountId()
+        resourceId = '/aws/lambda/UnitTest1Lambda'
         try:
             response = util.run_local(_isPreview(), _configRuleName(), _resourceType(), resourceId, _setupHandler, lambda_handler)
             print(response)
@@ -60,5 +61,5 @@ class TestRule(unittest.TestCase):
 if __name__ == '__main__':
     initLogging(None, 'INFO')
     loader = unittest.TestLoader()
-    loader.testMethodPrefix = "test_invoke"
+    loader.testMethodPrefix = "test_local"
     unittest.main(warnings='default', testLoader = loader)

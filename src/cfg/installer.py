@@ -44,6 +44,6 @@ def ruleResourceTags():
 def ruleFunctionCfg():
     return {
         'Runtime': 'python3.8',
-        'Timeout': 180,
+        'Timeout': 360,
         'MemorySize': 128
     }

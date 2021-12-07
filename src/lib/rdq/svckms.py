@@ -158,6 +158,11 @@ class KmsClient:
             if self._utils.is_resource_not_found(e): return False
             raise RdqError(self._utils.fail(e, op, 'AliasName', canonAlias))
 
+
+    def getCMKByAlias(self, alias):
+        canonAlias = _canon_alias(alias)
+        return self.describe_key(canonAlias)
+
     def declareCMKArn(self, description, alias, policyStatements, tags):
         statements = [self.policy_statement_default()]
         statements.extend(policyStatements)

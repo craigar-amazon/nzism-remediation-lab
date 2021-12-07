@@ -18,6 +18,17 @@ class RdqError(Exception):
     def message(self):
         return self._message
 
+class RdqTimeout(Exception):
+    def __init__(self, message):
+        self._message = message
+
+    def __str__(self):
+        return self._message
+    
+    @property
+    def message(self):
+        return self._message
+
 
 class Profile:
     def __init__(self, srcSession=None, roleName=None, sessionName=None, regionName=None):

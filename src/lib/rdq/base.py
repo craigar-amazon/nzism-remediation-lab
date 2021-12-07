@@ -31,6 +31,10 @@ class ServiceUtils:
     def service_op(self, op):
         return "{}:{}".format(self._service, op)
 
+    def is_error_code(self, e, errorCode):
+        erc = e.response['Error']['Code']
+        return erc == errorCode
+
     def is_resource_not_found(self, e):
         erc = e.response['Error']['Code']
         svc = self._service
