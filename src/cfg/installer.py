@@ -1,3 +1,11 @@
+import cfg.base as base
+
+ruleTimeoutSecs = base.stackMaxSecs + 60
+sqsBatchSize = base.sqsBatchSize
+dispatchTimeoutSecs = (ruleTimeoutSecs * sqsBatchSize) + 30
+dispatchTimeoutCappedSecs = min(dispatchTimeoutSecs, base.lambdaMaxSecs)
+sqsVisibilityTimeoutSecs = dispatchTimeoutCappedSecs + 30
+
 def folderConfig():
     return {
         'CodeHome': './src',
@@ -14,6 +22,7 @@ def coreFunctionName(codeFolder):
 def ruleFunctionName(codeFolder):
     return "NZISM-AutoRemediation-{}".format(codeFolder)
 
+
 def coreResourceName(baseName):
     return "NZISM-{}".format(baseName)
 
@@ -26,7 +35,7 @@ def coreResourceTags():
 def coreFunctionCfg():
     return {
         'Runtime': 'python3.8',
-        'Timeout': 600,
+        'Timeout': dispatchTimeoutCappedSecs,
         'MemorySize': 128,
         'Environment': {
             'Variables': {
@@ -34,16 +43,30 @@ def coreFunctionCfg():
             }
         }
     }
-    
+
+def coreEventBusCfg():
+    return {
+        'RuleTargetMaxAgeSecs': 12 * 3600
+    }
+
+def coreQueueCfg():
+    return {
+        'SqsVisibilityTimeoutSecs': sqsVisibilityTimeoutSecs,
+        'SqsPollCfg': {
+            'BatchSize': sqsBatchSize,
+            'MaximumBatchingWindowInSeconds': 0
+        }
+    }
+
 def ruleResourceTags():
     return {
         'Application': 'NZISM Auto Remediation',
         'Release': '0.1'
     }
 
-def ruleFunctionCfg():
+def ruleFunctionCfg(codeFolder):
     return {
         'Runtime': 'python3.8',
-        'Timeout': 360,
+        'Timeout': ruleTimeoutSecs,
         'MemorySize': 128
     }

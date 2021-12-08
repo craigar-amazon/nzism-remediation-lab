@@ -265,7 +265,7 @@ class CfnClient:
                 return stack
             self._utils.info(op, 'StackName', stackName, "Waiting for Completion", "Status", status)
             if self._utils.retry(tracker):
-                tracker = self._utils.backoff(tracker, 60)
+                tracker = self._utils.backoff(tracker, 30)
                 continue
             return None
 
@@ -289,9 +289,9 @@ class CfnClient:
 
     def wait_on_running_stack(self, stackName, maxSecs):
         op = 'WaitForRunningStack'
-        runningStatus = self.get_completed_stack(stackName, maxSecs)
-        if runningStatus:
-            raise RdqTimeout(self._utils.expired(op, 'StackName', stackName, 'Status', runningStatus, 'MaxSecs', maxSecs))
+        completionStatus = self.get_completed_stack(stackName, maxSecs)
+        if completionStatus: return completionStatus
+        raise RdqTimeout(self._utils.expired(op, 'StackName', stackName, 'Status', completionStatus, 'MaxSecs', maxSecs))
 
     def wait_on_running_stack_set_operations(self, stackSetName, callAs, maxSecs):
         op = 'WaitForRunningStackSetOperations'
@@ -324,7 +324,7 @@ class CfnClient:
         return stackId
 
     #PREVIEW
-    def deleteStack(self, stackName):
+    def removeStack(self, stackName):
         self.get_completed_stack(stackName, 600)
         self.delete_stack(stackName)
 
@@ -369,7 +369,7 @@ class CfnClient:
             'OperationId': operationId
         }
 
-    def deleteStackSet(self, stackSetName, orgunitids, regions, forOrganization=True):
+    def removeStackSet(self, stackSetName, orgunitids, regions, forOrganization=True):
         callAs = _callAs(forOrganization)
         operationId = self.delete_stack_instances(stackSetName, callAs, orgunitids, regions)
         self.is_running_stack_set_operations(stackSetName, callAs, 600)

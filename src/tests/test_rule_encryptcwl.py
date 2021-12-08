@@ -35,7 +35,7 @@ class TestRule(unittest.TestCase):
             response = util.run_local(_isPreview(), _configRuleName(), _resourceType(), resourceId, _setupHandler, lambda_handler)
             print(response)
             self.assertTrue(response)
-        except RdqError as e:
+        except Exception as e:
             self.fail(e)
 
     def test_direct(self):
@@ -45,7 +45,7 @@ class TestRule(unittest.TestCase):
             response = util.run_direct(_isPreview(), _configRuleName(), _resourceType(), resourceId, _setupHandler, lambda_handler)
             print(response)
             self.assertTrue(response)
-        except RdqError as e:
+        except Exception as e:
             self.fail(e)
 
     def test_invoke(self):
@@ -55,7 +55,7 @@ class TestRule(unittest.TestCase):
             response = util.run_invoke(_isPreview(), _configRuleName(), _resourceType(), resourceId, _setupHandler, _codeFolder())
             print("Lambda Response: {}".format(response))
             self.assertTrue(response)
-        except RdqError as e:
+        except Exception as e:
             self.fail(e)
 
 if __name__ == '__main__':

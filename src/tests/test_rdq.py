@@ -14,6 +14,8 @@ import lib.lambdas.discover as discover
 import lib.cfn as cfn
 import lib.cfn.iam as iam
 import lib.cfn.eventbridge as eb
+import lib.cfn.kms as kms
+import lib.cfn.cloudwatchlogs as cwl
 
 
 import cfg.installer as cfgInstaller
@@ -229,12 +231,12 @@ class TestRdq(unittest.TestCase):
         ebc = EventBridgeClient(profile)
         sqsc = SQSClient(profile)
 
-        sqsVisibilityTimeoutSecs = 15 * 60
-        ebTargetMaxAgeSecs = 12 * 3600
-        sqsPollCfg = {
-            'BatchSize': 5,
-            'MaximumBatchingWindowInSeconds': 0
-        }
+        queueCfg = cfgInstaller.coreQueueCfg()
+        sqsVisibilityTimeoutSecs = queueCfg['SqsVisibilityTimeoutSecs']
+        sqsPollCfg = queueCfg['SqsPollCfg']
+
+        ebCfg = cfgInstaller.coreEventBusCfg()
+        ebTargetMaxAgeSecs = ebCfg['RuleTargetMaxAgeSecs']
 
         tagsCore = Tags(cfgInstaller.coreResourceTags(), "coreResourceTags")
         tagsCore.putAll(Lifecycle="Unit Test")
@@ -290,13 +292,13 @@ class TestRdq(unittest.TestCase):
         lambdac.declareEventSourceMappingUUID(functionName, sqsArn, sqsPollCfg)
 
         ruleFolders = codeLoader.getAvailableRules()
-        rFunctionCfg = cfgInstaller.ruleFunctionCfg()
         self.assertIsNotNone(landingZoneConfig) # Add support for single accounts
         ruleRoleArn = landingZoneConfig['AuditRoleArn']
         for ruleFolder in ruleFolders:
             rZip = codeLoader.getRuleCode(ruleFolder)
             rFunctionName = cfgInstaller.ruleFunctionName(ruleFolder)
             rFunctionDescription = '{} Auto Remediation Lambda'.format(ruleFolder)
+            rFunctionCfg = cfgInstaller.ruleFunctionCfg(ruleFolder)
             rLambdaArn = lambdac.declareFunctionArn(rFunctionName, rFunctionDescription, ruleRoleArn, rFunctionCfg, rZip, tagsRule)
 
         print("Done")
@@ -309,6 +311,41 @@ class TestRdq(unittest.TestCase):
         iamc.deleteRole(lambdaRoleName)
         sqsc.deleteQueue(queueName)
         ebc.deleteEventBus(eventBusName)
+
+
+    def test_stack_local(self):
+        cmkAliasBaseName = 'cwlog'
+        cmkDescription = "For use by CloudWatch Log Service"
+        cmkSid = "cwl"
+        stackName = "NZISM-AutoDeployed-CloudWatchLogs-CMK"
+        stackDescription = "Creates CMK for encrypting CloudWatch Logs"
+        stackMaxSecs = 300
+        profile = Profile()
+        task_regionName = profile.regionName
+        task_accountId = profile.accountId
+        task_autoResourceTags = Tags({'AutoDeployed': 'True', 'AutoDeploymentReason': 'NZISM Conformance' })
+
+        cfnc = CfnClient(profile)
+        cycle = 1
+        for _cmk in ['rCMK', 'rCMK', 'rCMK1']:
+            _keyAlias = 'rKeyAlias'
+            regionName = task_regionName
+            accountId = task_accountId
+            principal = cwl.iamPrincipal(regionName)
+            condition = iam.ArnLike(cwl.kmsEncryptionContextKey(), cwl.kmsEncryptionContextValue(regionName, accountId, "*"))
+            actions = [kms.iamEncrypt, kms.iamDecrypt, kms.iamReEncrypt, kms.iamGenerateDataKey, kms.iamDescribe]
+            allowCwl = iam.ResourceAllow(actions, principal, "*", condition, cmkSid)
+            keyPolicy = kms.KeyPolicy(accountId, [allowCwl])
+            resources = {}
+            resources[_cmk] = kms.KMS_Key(cmkDescription, keyPolicy, task_autoResourceTags)
+            resources[_keyAlias] = kms.KMS_Alias(cmkAliasBaseName, cfn.Ref(_cmk))
+            template = cfn.Template(stackDescription, resources)
+            stackId = cfnc.declareStack(stackName, template, task_autoResourceTags)
+            optStack = cfnc.getCompletedStack(stackName, stackMaxSecs)
+            self.assertTrue(len(optStack) > 0)
+            cycle = cycle + 1
+
+        cfnc.removeStack(stackName)
 
 
     def test_stackset(self):
@@ -343,7 +380,7 @@ class TestRdq(unittest.TestCase):
         templateMap = cfn.Template(stackSetDescription, resourceMap)
         profile = Profile()
         cfnc = CfnClient(profile)
-        cfnc.deleteStackSet(stackSetName, orgIds, regions)
+        cfnc.removeStackSet(stackSetName, orgIds, regions)
         ss0 = cfnc.declareStackSet(stackSetName, templateMap, stackSetDescription, tagsCore, orgIds, regions)
         self.assertTrue(len(ss0) == 2)
         ss1 = cfnc.declareStackSet(stackSetName, templateMap, stackSetDescription, tagsCore, orgIds, regions)
@@ -356,14 +393,14 @@ class TestRdq(unittest.TestCase):
         self.assertTrue(len(summary2) > 0)
         cfnc.isRunningStackSetOperations(stackSetName)
         print("Done")
-        cfnc.deleteStackSet(stackSetName, orgIds, regions)
+        cfnc.removeStackSet(stackSetName, orgIds, regions)
 
 
 
 if __name__ == '__main__':
     initLogging(None, 'INFO')
     loader = unittest.TestLoader()
-    loader.testMethodPrefix = "test_stackset"
+    loader.testMethodPrefix = "test_stack_local"
     unittest.main(warnings='default', testLoader = loader)
     # setup_assume_role('746869318262')
     # test_assume_role('119399605612')
