@@ -1,27 +1,44 @@
-def configRuleMapping(accountId):
-    return {
-        'lambda-function-public-access-prohibited': None,
-        's3-account-level-public-access-blocks-periodic': 'ApplyS3BPA'
+import cfg.base as base
+
+ruleTable = {}
+ruleTable['s3-account-level-public-access-blocks-periodic'] = {
+    'Folder': 'ApplyS3BPA'
+}
+ruleTable['cloudwatch-log-group-encrypted'] = {
+    'Folder': 'EncryptCWL',
+    'Preview': True,
+    'Deploy': {
+        'CreateStack': False,
+        'StackMaxSecs': base.stackMaxSecs
     }
+}
 
-def isPreviewRuleListInclusive(accountId):
-    return True
+def codeFolder(configRuleName, accountName):
+    rule :dict = ruleTable.get(configRuleName)
+    return rule.get('Folder') if rule else None
 
-def previewRuleList(accountId):
-    return [
-        'lambda-function-public-access-prohibited'
-    ]
+def action(configRuleName, accountName):
+    rule :dict = ruleTable.get(configRuleName)
+    return rule.get('Action') if rule else None
+
+def isPreview(configRuleName, accountName):
+    rule :dict = ruleTable.get(configRuleName)
+    return rule.get('Preview', True) if rule else True
+
+def deploymentMethod(configRuleName, accountName):
+    rule :dict = ruleTable.get(configRuleName)
+    return rule.get('Deploy') if rule else None
 
 def conformancePackName():
     return "NZISM"
 
-def stackNamePattern(configRuleName, accountId):
+def stackNamePattern(configRuleName, accountName):
     return "NZISM-AutoDeployed-{}"
 
-def manualRemediationTagName(configRuleName, accountId):
+def manualRemediationTagName(configRuleName, accountName):
     return 'ManualRemediation'
 
-def autoResourceTags(configRuleName, accountId):
+def autoResourceTags(configRuleName, accountName):
     return {
         'AutoDeployed': 'True',
         'AutoDeploymentReason': 'NZISM Conformance'

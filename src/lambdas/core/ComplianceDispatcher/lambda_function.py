@@ -2,8 +2,8 @@ from lib.rdq import Profile
 from lib.rdq.svclambda import LambdaClient
 
 from lib.base import initLogging
-import lib.lambdas.core.parser as parser
-import lib.lambdas.core.analyzer as analyzer
+import lib.lambdas.core.parser as cp
+import lib.lambdas.core.analyzer as ca
 
 
 def make_invocations(profile, functionCallList):
@@ -12,15 +12,16 @@ def make_invocations(profile, functionCallList):
         functionName = functionCall['functionName']
         event = functionCall['event']
         functionResponse = lambdac.invokeFunctionJson(functionName, event)
-        analyzer.analyzeResponse(functionName, event, functionResponse)
+        ca.analyzeResponse(functionName, event, functionResponse)
 
 
 def lambda_handler(event, context):
     initLogging()
-    dispatchList = parser.createDispatchList(event)
+    dispatchList = cp.createDispatchList(event)
     if len(dispatchList) == 0: return
     profile = Profile()
-    functionCallList = parser.createInvokeList(profile, dispatchList)
+    parser = cp.Parser(profile)
+    functionCallList = parser.createInvokeList(dispatchList)
     if len(functionCallList) == 0: return
     make_invocations(profile, functionCallList)
 

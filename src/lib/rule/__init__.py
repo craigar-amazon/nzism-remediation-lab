@@ -38,11 +38,14 @@ def _required(argVal, argName):
     if argVal: return argVal
     erm = "Require a value for {}".format(argName)
 
-def _required_value(src, propName, defValue=None):
+def _required_value(src, propName):
     if propName in src: return src[propName]
-    if defValue: return defValue
     erm = "Missing value for required property {}".format(propName)
     raise RuleImplementationError(erm)
+
+def _defaulted_value(src, propName, defValue):
+    if propName in src: return src[propName]
+    return defValue
 
 class Task:
     def __init__(self, props):
@@ -51,10 +54,22 @@ class Task:
         self._startedAt = time.time()
     
     @property
+    def action(self): return self._props['action']
+
+    @property
+    def isActionRemediate(self): return self._props['action'] == 'remediate'
+
+    @property
     def isPreview(self): return self._props['isPreview']
 
     @property
     def accountId(self): return self._props['accountId']
+
+    @property
+    def accountName(self): return self._props['accountName']
+
+    @property
+    def accountEmail(self): return self._props['accountEmail']
 
     @property
     def regionName(self): return self._props['regionName']
@@ -72,10 +87,13 @@ class Task:
     def manualTagName(self): return self._props['manualTagName']
 
     @property
-    def autoResourceTags(self): return self._autoResourceTags
+    def autoResourceTags(self) -> dict: return self._autoResourceTags
 
     @property
     def stackNamePattern(self): return self._props['stackNamePattern']
+
+    @property
+    def deploymentMethod(self) -> dict: return self._props['deploymentMethod']
 
     @property
     def elapsedSecs(self):
@@ -104,25 +122,32 @@ class RuleMain:
 
     def _remediate_imp(self, event):
         configRuleName = _required_value(event, 'configRuleName')
-        isPreview = _required_value(event, 'preview', True)
+        action = _defaulted_value(event, 'action', 'remediate')
+        isPreview = _defaulted_value(event, 'preview', True)
         target = _required_value(event, 'target')
         resourceType = _required_value(target, 'resourceType')
         resourceId = _required_value(target, 'resourceId')
         handlingMethod = self._select_handling_method(configRuleName, resourceType)
         awsAccountId = _required_value(target, 'awsAccountId')
+        awsAccountName = _required_value(target, 'awsAccountName')
+        awsAccountEmail = _required_value(target, 'awsAccountEmail')
         awsRegion = _required_value(target, 'awsRegion')
         roleName = _required_value(target, 'roleName')
         taskProps = {
             'configRuleName': configRuleName,
+            'action': action,
             'isPreview': isPreview,
             'resourceType': resourceType,
             'resourceId': resourceId,
             'accountId': awsAccountId,
+            'accountName': awsAccountName,
+            'accountEmail': awsAccountEmail,
             'regionName': awsRegion,
             'conformancePackName': _required_value(event, 'conformancePackName'),
             'manualTagName': _required_value(event, 'manualTagName'),
             'autoResourceTags': _required_value(event, 'autoResourceTags'),
-            'stackNamePattern': _required_value(event, 'stackNamePattern')
+            'stackNamePattern': _required_value(event, 'stackNamePattern'),
+            'deploymentMethod': _defaulted_value(event, 'deploymentMethod', {})
         }
         task = Task(taskProps)
         sessionName = self._session_name(configRuleName)

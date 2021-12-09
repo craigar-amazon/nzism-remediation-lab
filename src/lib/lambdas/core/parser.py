@@ -4,8 +4,11 @@ import json
 import cfg.installer as cfginstall
 import cfg.rules as cfgrules
 
+from lib.rdq import Profile
 from lib.base import ConfigError
-import lib.lambdas.discover as discover
+from lib.lambdas.discover import Discover
+
+keywordLocalAccount = 'LOCAL'
 
 def has_expected_attribute(src, id, aname, expected):
     if not (aname in src):
@@ -97,67 +100,111 @@ def createDispatchList(event):
                 dispatchList.append(dispatch)
     return dispatchList
 
-def createInvokeList(profile, dispatchList):
-    conformancePackName = cfgrules.conformancePackName()
-    optLandingZone = discover.discoverLandingZone(profile)
-    functionCallList = []
-    for dispatch in dispatchList:
-        targetAccountId = dispatch['awsAccountId']
-        configRuleMap = cfgrules.configRuleMapping(targetAccountId)
-        previewRuleList = cfgrules.previewRuleList(targetAccountId)
-        previewInclusive = cfgrules.isPreviewRuleListInclusive(targetAccountId)
-        previewRuleSet = set(previewRuleList)
-        configRuleName = dispatch['configRuleNameBase']
-        ruleCodeFolder = None
-        if configRuleName in configRuleMap:
-            ruleCodeFolder = configRuleMap[configRuleName]
-        if not ruleCodeFolder:
-            logging.info("No auto remediation defined for rule %s", configRuleName)
-            continue
-        functionName = cfginstall.ruleFunctionName(ruleCodeFolder)
-        isPreviewSetMember = configRuleName in previewRuleSet
-        isPreview = isPreviewSetMember if previewInclusive else (not isPreviewSetMember)
-        isLocalAccount = profile.accountId == targetAccountId
+
+class Parser:
+    def __init__(self, profile :Profile):
+        self._profile = profile
+        self._discover = Discover(profile)
+
+    def get_account_desc(self, optLandingZone, accountId):
+        if not optLandingZone:
+            return {
+                'Name': keywordLocalAccount,
+                'Email': keywordLocalAccount
+            }
+        targetDesc = self._discover.getAccountDescription(accountId)
+        targetStatus = targetDesc['Status']
+        if targetStatus != 'ACTIVE':
+            logging.info("Skipping account %s with status %s", accountId, targetStatus)
+            return None
+        return {
+            'Name': targetDesc['Name'],
+            'Email': targetDesc['Email']
+        }
+
+    def get_target_role(self, optLandingZone, accountId):
         targetRole = None
         if optLandingZone:
             targetRole = optLandingZone['RemediationRoleName']
         else:
-            if isLocalAccount:
-                targetRole = 'LOCAL'
+            if self._profile.accountId == accountId:
+                targetRole = keywordLocalAccount
         if not targetRole:
-            erm = "Cannot remediate account {} without a remediation role".format(targetAccountId)
+            erm = "Cannot remediate account {} without a remediation role".format(accountId)
             logging.error(erm)
             raise ConfigError(erm)
-        manualTagName = cfgrules.manualRemediationTagName(configRuleName, targetAccountId)
-        if not manualTagName:
-            manualTagName = "DoNotAutoRemediate"
-            logging.warning("No manual remediation tag defined for rule %s; will use %s", configRuleName, manualTagName)
-        autoResourceTags = cfgrules.autoResourceTags(configRuleName, targetAccountId)
-        if not autoResourceTags:
-            autoResourceTags = {'AutoDeployed': 'True'}
-            logging.warning("No tags defined for auto-deployed resources by rule %s; will use %s", configRuleName, autoResourceTags)
-        stackNamePattern = cfgrules.stackNamePattern(configRuleName, targetAccountId)
-        if not stackNamePattern:
-            stackNamePattern = conformancePackName + "-AutoDeploy-{}"
-            logging.warning("No stack name pattern defined for auto-deployed stacks by rule %s; will use %s", configRuleName, stackNamePattern)
+        return targetRole
 
-        awsRegion = dispatch['awsRegion']
-        resourceType = dispatch['resourceType']
-        resourceId = dispatch['resourceId']
-        eventMap = {
-            'preview': isPreview,
-            'conformancePackName': conformancePackName,
-            'configRuleName': configRuleName,
-            'manualTagName': manualTagName,
-            'autoResourceTags': autoResourceTags,
-            'stackNamePattern': stackNamePattern,
-            'target': {
-                'awsAccountId': targetAccountId,
-                'awsRegion': awsRegion,
-                'roleName': targetRole,
-                'resourceType': resourceType,
-                'resourceId': resourceId
-            }
-        }
-        functionCallList.append({'functionName': functionName, 'event': eventMap})
-    return functionCallList
+    def get_action(self, configRuleName, accountName):
+        action = cfgrules.action(configRuleName, accountName)
+        if action: return action
+        return 'remediate'
+
+    def get_preview(self, configRuleName, accountName):
+        preview = cfgrules.isPreview(configRuleName, accountName)
+        if preview is None: return True
+        return preview
+
+    def get_manual_tag_name(self, configRuleName, accountName):
+        tagName = cfgrules.manualRemediationTagName(configRuleName, accountName)
+        if tagName: return tagName
+        tagName = "DoNotAutoRemediate"
+        logging.warning("No manual remediation tag defined for rule %s; will use %s", configRuleName, tagName)
+        return tagName
+
+    def get_auto_resource_tags(self, configRuleName, accountName):
+        tags = cfgrules.autoResourceTags(configRuleName, accountName)
+        if tags: return tags
+        tags = {'AutoDeployed': 'True'}
+        logging.warning("No tags defined for auto-deployed resources by rule %s; will use %s", configRuleName, tags)
+        return tags
+
+    def get_stack_name_pattern(self, configRuleName, accountName):
+        pattern = cfgrules.stackNamePattern(configRuleName, accountName)
+        if pattern: return pattern
+        conformancePackName = cfgrules.conformancePackName()
+        pattern = conformancePackName + "-AutoDeploy-{}"
+        logging.warning("No stack name pattern defined for auto-deployed stacks by rule %s; will use %s", configRuleName, pattern)
+        return pattern
+
+    def create_invoke(self, optLandingZone, dispatch):
+        targetAccountId = dispatch['awsAccountId']
+        optTargetDesc = self.get_account_desc(optLandingZone, targetAccountId)
+        if not optTargetDesc: return None
+        targetRole = self.get_target_role(optLandingZone, targetAccountId)
+        targetAccountName = optTargetDesc['Name']
+        targetAccountEmail = optTargetDesc['Email']
+        configRuleName = dispatch['configRuleNameBase']
+        ruleCodeFolder = cfgrules.codeFolder(configRuleName, targetAccountName)
+        if not ruleCodeFolder:
+            logging.info("No auto remediation defined for rule %s and account %s", configRuleName, targetAccountName)
+            return None
+        functionName = cfginstall.ruleFunctionName(ruleCodeFolder)
+        target = {}
+        target['awsAccountId'] = targetAccountId
+        target['awsAccountName'] = targetAccountName
+        target['awsAccountEmail'] = targetAccountEmail
+        target['awsRegion'] = dispatch['awsRegion']
+        target['roleName'] = targetRole
+        target['resourceType'] = dispatch['resourceType']
+        target['resourceId'] = dispatch['resourceId']
+        event = {}
+        event['configRuleName'] = configRuleName
+        event['action'] = self.get_action(configRuleName, targetAccountName)
+        event['preview'] = self.get_preview(configRuleName, targetAccountName)
+        event['conformancePackName'] = cfgrules.conformancePackName()
+        event['manualTagName'] = self.get_manual_tag_name(configRuleName, targetAccountName)
+        event['autoResourceTags'] = self.get_auto_resource_tags(configRuleName, targetAccountName)
+        event['stackNamePattern'] = self.get_stack_name_pattern(configRuleName, targetAccountName)
+        event['target'] = target
+        return {'functionName': functionName, 'event': event}
+
+    def createInvokeList(self, dispatchList):
+        optLandingZone = self._discover.discoverLandingZone()
+        invokeList = []
+        for dispatch in dispatchList:
+            optInvoke = self.create_invoke(optLandingZone, dispatch)
+            if not optInvoke: continue
+            invoke = {'functionName': optInvoke['functionName'], 'event': optInvoke['event']}
+            invokeList.append(invoke)
+        return invokeList

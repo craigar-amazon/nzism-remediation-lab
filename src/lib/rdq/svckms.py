@@ -15,6 +15,10 @@ class KmsClient:
         self._client = profile.getClient(service)
         self._utils = ServiceUtils(profile, service)
 
+    def create_preview_arn(self):
+        resourceName = "key/{}".format(self._utils.new_preview_uuid())
+        return self._profile.getRegionAccountArn("kms", resourceName)
+
     def policy_statement_default(self):
         sid = "Enable IAM policies"
         principalArn = "arn:aws:iam::{}:root".format(self._profile.accountId)
@@ -39,8 +43,15 @@ class KmsClient:
             if self._utils.is_resource_not_found(e): return None
             raise RdqError(self._utils.fail(e, op, 'KeyId', keyId))
 
+    #PREVIEW
     def create_key_arn(self, description, policyJson, tags):
         op = 'create_key'
+        args = {
+            'Description': description,
+            'Policy': policyJson,
+            'Tags': tags.toDict()
+        }
+        if self._utils.preview(op, args): return self.create_preview_arn()
         try:
             response = self._client.create_key(
                 KeySpec="SYMMETRIC_DEFAULT",
@@ -52,8 +63,14 @@ class KmsClient:
         except botocore.exceptions.ClientError as e:
             raise RdqError(self._utils.fail(e, op, 'Description', description))
 
+    #PREVIEW
     def create_alias(self, aliasName, cmkArn):
         op = 'create_alias'
+        args = {
+            'AliasName': aliasName,
+            'TargetKeyId': cmkArn
+        }
+        if self._utils.preview(op, args): return
         try:
             self._client.create_alias(
                 AliasName=aliasName,
@@ -73,8 +90,14 @@ class KmsClient:
         except botocore.exceptions.ClientError as e:
             raise RdqError(self._utils.fail(e, op, 'CmkArn', cmkArn))
 
+    #PREVIEW
     def put_key_policy(self, cmkArn, policyJson):
         op = 'put_key_policy'
+        args = {
+            'KeyId': cmkArn,
+            'Policy': policyJson
+        }
+        if self._utils.preview(op, args): return
         try:
             self._client.put_key_policy(
                 KeyId=cmkArn,
@@ -106,8 +129,14 @@ class KmsClient:
         except botocore.exceptions.ClientError as e:
             raise RdqError(self._utils.fail(e, op, 'CmkArn', cmkArn))
 
+    #PREVIEW
     def update_key_description(self, cmkArn, description):
         op = 'update_key_description'
+        args = {
+            'KeyId': cmkArn,
+            'Description': description
+        }
+        if self._utils.preview(op, args): return
         try:
             self._client.update_key_description(
                 KeyId=cmkArn,
@@ -126,8 +155,13 @@ class KmsClient:
         except botocore.exceptions.ClientError as e:
             raise RdqError(self._utils.fail(e, op, 'CmkArn', cmkArn))
 
+    #PREVIEW
     def enable_key_rotation(self, cmkArn):
         op = 'enable_key_rotation'
+        args = {
+            'KeyId': cmkArn
+        }
+        if self._utils.preview(op, args): return
         try:
             self._client.enable_key_rotation(
                 KeyId=cmkArn
@@ -135,8 +169,15 @@ class KmsClient:
         except botocore.exceptions.ClientError as e:
             raise RdqError(self._utils.fail(e, op, 'CmkArn', cmkArn))
 
+    #PREVIEW
     def schedule_key_deletion(self, cmkArn, pendingWindowInDays):
         op = 'schedule_key_deletion'
+        op = 'enable_key_rotation'
+        args = {
+            'KeyId': cmkArn,
+            'PendingWindowInDays': pendingWindowInDays
+        }
+        if self._utils.preview(op, args): return
         try:
             self._client.schedule_key_deletion(
                 KeyId=cmkArn,
@@ -147,8 +188,13 @@ class KmsClient:
             if self._utils.is_resource_not_found(e): return False
             raise RdqError(self._utils.fail(e, op, 'CmkArn', cmkArn))
 
+    #PREVIEW
     def delete_alias(self, canonAlias):
         op = 'delete_alias'
+        args = {
+            'AliasName': canonAlias
+        }
+        if self._utils.preview(op, args): return True
         try:
             self._client.delete_alias(
                 AliasName=canonAlias
@@ -158,11 +204,18 @@ class KmsClient:
             if self._utils.is_resource_not_found(e): return False
             raise RdqError(self._utils.fail(e, op, 'AliasName', canonAlias))
 
+    def createPreviewArn(self):
+        return self.create_preview_arn()
 
     def getCMKByAlias(self, alias):
         canonAlias = _canon_alias(alias)
         return self.describe_key(canonAlias)
 
+    #PREVIEW
+    def enableKeyRotation(self, cmkArn):
+        self.enable_key_rotation(cmkArn)
+
+    #PREVIEW
     def declareCMKArn(self, description, alias, policyStatements, tags):
         statements = [self.policy_statement_default()]
         statements.extend(policyStatements)
@@ -203,7 +256,7 @@ class KmsClient:
             self.tag_resource(exArn, deltaTags)
         return exArn
 
-    def deleteCMK(self, alias, pendingWindowInDays=7):
+    def removeCMK(self, alias, pendingWindowInDays=7):
         canonAlias = _canon_alias(alias)
         exMeta = self.describe_key(canonAlias)
         if exMeta:

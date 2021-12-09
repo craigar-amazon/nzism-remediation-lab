@@ -216,7 +216,7 @@ class EventBridgeClient:
         self.put_permission(eventBusName, sid, action, condition)
 
 
-    def deleteEventBus(self, eventBusName):
+    def removeEventBus(self, eventBusName):
         rules = self.list_rules(eventBusName)
         for rule in rules:
             ruleName = rule['Name']

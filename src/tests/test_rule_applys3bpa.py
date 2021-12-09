@@ -6,21 +6,16 @@ from lambdas.test.ApplyS3BPA.lambda_function import lambda_handler
 
 import tests.util_lambda as util
 
-def _isPreview():
-    return False
+_configRuleName = 's3-account-level-public-access-blocks-periodic'
+_resourceType = 'AWS::::Account'
+_codeFolder = 'ApplyS3BPA'
+
+_isPreview = False
+_action = 'remediate'
 
 def _setupHandler(profile, resourceId):
     s3c = S3ControlClient(profile)
     s3c.declarePublicAccessBlock(resourceId, False)
-
-def _configRuleName():
-    return 's3-account-level-public-access-blocks-periodic'
-
-def _resourceType():
-    return 'AWS::::Account'
-
-def _codeFolder():
-    return 'ApplyS3BPA'
 
 class TestRule(unittest.TestCase):
     def test_setup(self):
@@ -30,8 +25,9 @@ class TestRule(unittest.TestCase):
     def test_local(self):
         print("ACTION: Ensure credentials set to dispatching audit account")
         resourceId = util.dispatchAccountId()
+        deploymentMethod = {}
         try:
-            response = util.run_local(_isPreview(), _configRuleName(), _resourceType(), resourceId, _setupHandler, lambda_handler)
+            response = util.run_local(_isPreview, _configRuleName, _resourceType, resourceId, _action, deploymentMethod, _setupHandler, lambda_handler)
             print(response)
             self.assertTrue(response)
         except RdqError as e:
@@ -40,8 +36,9 @@ class TestRule(unittest.TestCase):
     def test_direct(self):
         print("ACTION: Ensure credentials set to dispatching audit account")
         resourceId = util.targetAccountId()
+        deploymentMethod = {}
         try:
-            response = util.run_direct(_isPreview(), _configRuleName(), _resourceType(), resourceId, _setupHandler, lambda_handler)
+            response = util.run_direct(_isPreview, _configRuleName, _resourceType, resourceId, _action, deploymentMethod, _setupHandler, lambda_handler)
             print(response)
             self.assertTrue(response)
         except RdqError as e:
@@ -50,8 +47,9 @@ class TestRule(unittest.TestCase):
     def test_invoke(self):
         print("ACTION: Ensure credentials set to dispatching audit account")
         resourceId = util.targetAccountId()
+        deploymentMethod = {}
         try:
-            response = util.run_invoke(_isPreview(), _configRuleName(), _resourceType(), resourceId, _setupHandler, _codeFolder())
+            response = util.run_invoke(_isPreview, _configRuleName, _resourceType, resourceId, _action, deploymentMethod, _setupHandler, _codeFolder())
             print("Lambda Response: {}".format(response))
             self.assertTrue(response)
         except RdqError as e:

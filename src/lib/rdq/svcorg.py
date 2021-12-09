@@ -12,7 +12,7 @@ class OrganizationClient:
 
     def diagnosticDelegated(self, op):
         accountId = self._profile.accountId
-        msg = "Ensure account is delegated administrator"
+        msg = "Ensure account is delegated administrator for Organization"
         self._utils.warning(op, "Account", accountId, msg)
 
 
@@ -25,6 +25,20 @@ class OrganizationClient:
             self.diagnosticDelegated(op)
             raise RdqError(self._utils.fail(e, op))
 
+    def describe_account(self, accountId):
+        op = 'describe_account'
+        try:
+            response = self._client.describe_account(
+                AccountId = accountId
+            )
+            return response['Account']
+        except botocore.exceptions.ClientError as e:
+            self.diagnosticDelegated(op)
+            raise RdqError(self._utils.fail(e, op))
+
     def getOrganizationId(self):
         org = self.describe_organization()
         return org['Id']
+
+    def getAccountDescription(self, accountId):
+        return self.describe_account(accountId)

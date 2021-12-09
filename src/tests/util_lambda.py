@@ -9,6 +9,12 @@ import cfg.rules as cfgrules
 def targetAccountId():
     return '119399605612'
 
+def targetAccountName():
+    return 'Application-1'
+
+def targetAccountEmail():
+    return 'craigar+ctapp1@amazon.com'
+
 def dispatchAccountId():
     return '746869318262'
 
@@ -57,18 +63,22 @@ def setup_targetAccount():
     print("Account {} can be used as target for {}".format(profile.accountId, trustAccountId))
     return profile.accountId
 
-def run_local(preview, configRuleName, resourceType, resourceId, setupFunction, lambdaFunction):
+def run_local(preview, configRuleName, resourceType, resourceId, action, deploymentMethod, setupFunction, lambdaFunction):
     profile = Profile()
     roleName = 'LOCAL'
     event = {
+        'action': action,
         'preview': preview,
         'conformancePackName': conformancePackName(),
         'configRuleName': configRuleName,
         'manualTagName': manualTagName(),
         'autoResourceTags': autoResourceTags(),
         'stackNamePattern': stackNamePattern(),
+        'deploymentMethod': deploymentMethod,
         'target': {
             'awsAccountId': profile.accountId,
+            'awsAccountName': targetAccountName(),
+            'awsAccountEmail': targetAccountEmail(),
             'awsRegion': 'ap-southeast-2',
             'roleName': roleName,
             'resourceType': resourceType,
@@ -83,18 +93,22 @@ def run_local(preview, configRuleName, resourceType, resourceId, setupFunction, 
         response = None
     return response
 
-def run_direct(preview, configRuleName, resourceType, resourceId, setupFunction, lambdaFunction):
+def run_direct(preview, configRuleName, resourceType, resourceId, action, deploymentMethod, setupFunction, lambdaFunction):
     toAccountId = targetAccountId()
     roleName = targetRoleNameDirect()
     event = {
+        'action': action,
         'preview': preview,
         'conformancePackName': conformancePackName(),
         'configRuleName': configRuleName,
         'manualTagName': manualTagName(),
         'autoResourceTags': autoResourceTags(),
         'stackNamePattern': stackNamePattern(),
+        'deploymentMethod': deploymentMethod,
         'target': {
             'awsAccountId': toAccountId,
+            'awsAccountName': targetAccountName(),
+            'awsAccountEmail': targetAccountEmail(),
             'awsRegion': 'ap-southeast-2',
             'roleName': roleName,
             'resourceType': resourceType,
@@ -111,20 +125,24 @@ def run_direct(preview, configRuleName, resourceType, resourceId, setupFunction,
         response = None
     return response
 
-def run_invoke(preview, configRuleName, resourceType, resourceId, setupFunction, codeFolder):
+def run_invoke(preview, configRuleName, resourceType, resourceId, action, deploymentMethod, setupFunction, codeFolder):
     toAccountId = targetAccountId()
     prepRoleName = targetRoleNameDirect()
     lambdaRoleName = auditRoleNameCT()
     targetRoleName = targetRoleNameCT()
     event = {
+        'action': action,
         'preview': preview,
         'conformancePackName': conformancePackName(),
         'configRuleName': configRuleName,
         'manualTagName': manualTagName(),
         'autoResourceTags': autoResourceTags(),
         'stackNamePattern': stackNamePattern(),
+        'deploymentMethod': deploymentMethod,
         'target': {
             'awsAccountId': toAccountId,
+            'awsAccountName': targetAccountName(),
+            'awsAccountEmail': targetAccountEmail(),
             'awsRegion': 'ap-southeast-2',
             'roleName': targetRoleName,
             'resourceType': resourceType,

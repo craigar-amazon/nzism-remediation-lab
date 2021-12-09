@@ -220,7 +220,7 @@ class TestRdq(unittest.TestCase):
         print("Done")
 
         sqsc.deleteQueue(queueName)
-        ebc.deleteEventBus(eventBusName)
+        ebc.removeEventBus(eventBusName)
 
     def test_dispatcher(self):
         profile = Profile()
@@ -310,7 +310,7 @@ class TestRdq(unittest.TestCase):
         lambdac.deleteFunction(functionName)
         iamc.deleteRole(lambdaRoleName)
         sqsc.deleteQueue(queueName)
-        ebc.deleteEventBus(eventBusName)
+        ebc.removeEventBus(eventBusName)
 
 
     def test_stack_local(self):

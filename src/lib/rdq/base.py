@@ -137,6 +137,10 @@ class ServiceUtils:
             logging.info("Retry possible after operation-in-progress error | Detail: %s", e)
         return canRetry
 
+    def new_preview_uuid(self):
+        id = str(uuid.uuid4())
+        return "00000000-0000-0000-{}".format(id[19:])
+
     def new_operation_id(self):
         return str(uuid.uuid4())
 
@@ -218,5 +222,3 @@ class ServiceUtils:
     def preview(self, op, args):
         sop = self.service_op(op)
         return self._profile.preview(sop, args)
-
-
