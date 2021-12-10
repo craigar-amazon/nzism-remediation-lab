@@ -19,27 +19,25 @@ def createCMKPolicyStatements(task :Task):
     allowCwl = iam.ResourceAllow(actions, principal, "*", condition, cmkSid)
     return [allowCwl]
 
-def declareCMKARN(profile :Profile, task :Task):
+def declareCMKArn(profile :Profile, task :Task):
     cmkResolver = CMKResolver(profile)
     policyStatements = createCMKPolicyStatements(task)
-    return cmkResolver.declareARN(task, cmkAliasBaseName, cmkDescription, policyStatements)
+    return cmkResolver.declareArn(task, cmkAliasBaseName, cmkDescription, policyStatements)
 
 def lambda_handler(event, context):
     main = RuleMain()
-    main.addHandler(
-        configRuleName='cloudwatch-log-group-encrypted',
-        resourceType= 'AWS::Logs::LogGroup',
-        handlingMethod=associateCMK
-    )
-    return main.remediate(event)
+    main.addRemediationHandler('cloudwatch-log-group-encrypted', 'AWS::Logs::LogGroup',remediate)
+    main.addBaselineHandler('cloudwatch-log-group-encrypted', 'AWS::Logs::LogGroup',baseline)
+    return main.action(event)
 
-def associateCMK(profile :Profile, task :Task):
-    cmkArn = declareCMKARN(profile, task)
-    print(cmkArn)
+def baseline(profile :Profile, task :Task):
+    cmkArn = declareCMKArn(profile, task)
+    return {
+        'cmkArn': cmkArn 
+    }
 
-
-
-    # modified = s3c.declarePublicAccessBlock(accountId, True)
-    # return {
-    #     'modified': modified
-    # }
+def remediate(profile :Profile, task :Task):
+    cmkArn = declareCMKArn(profile, task)
+    return {
+        'cmkArn': cmkArn 
+    }

@@ -27,7 +27,7 @@ class CMKResolver:
         stackDescription = "Creates CMK - {}".format(description)
         return cfn.Template(stackDescription, resources)
 
-    def declareARN(self, task :Task, aliasBase :str, description: str, policyStatements :list):
+    def declareArn(self, task :Task, aliasBase :str, description: str, policyStatements :list):
         exCMK = self._kmsClient.getCMKByAlias(aliasBase)
         if exCMK: return exCMK['Arn']
         tags = task.autoResourceTags

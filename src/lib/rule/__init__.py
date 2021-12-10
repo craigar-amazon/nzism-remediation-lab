@@ -2,11 +2,24 @@ import logging
 import json
 import time
 
+from typing import Callable
+
 from lib.base import initLogging, Tags
 from lib.rdq import Profile, RdqError, RdqTimeout
 
 
-class RuleImplementationError(Exception):
+class RuleSoftwareError(Exception):
+    def __init__(self, message):
+        self._message = message
+
+    def __str__(self):
+        return self._message
+    
+    @property
+    def message(self):
+        return self._message
+
+class RuleConfigurationError(Exception):
     def __init__(self, message):
         self._message = message
 
@@ -41,7 +54,7 @@ def _required(argVal, argName):
 def _required_value(src, propName):
     if propName in src: return src[propName]
     erm = "Missing value for required property {}".format(propName)
-    raise RuleImplementationError(erm)
+    raise RuleSoftwareError(erm)
 
 def _defaulted_value(src, propName, defValue):
     if propName in src: return src[propName]
@@ -55,9 +68,6 @@ class Task:
     
     @property
     def action(self): return self._props['action']
-
-    @property
-    def isActionRemediate(self): return self._props['action'] == 'remediate'
 
     @property
     def isPreview(self): return self._props['isPreview']
@@ -96,6 +106,12 @@ class Task:
     def deploymentMethod(self) -> dict: return self._props['deploymentMethod']
 
     @property
+    def configRuleName(self): return self._props['configRuleName']
+
+    @property
+    def roleName(self): return self._props['roleName']
+
+    @property
     def elapsedSecs(self):
         return time.time() - self._startedAt
 
@@ -106,52 +122,55 @@ class Task:
 class RuleMain:
     def __init__(self, logLevelVariable='LOGLEVEL', defaultLevel='INFO'):
         initLogging(logLevelVariable, defaultLevel)
-        self._handlers = []
-    
-    def _select_handling_method(self, configRuleName, resourceType):
-        for handler in self._handlers:
+        self._remediationHandlers = []
+        self._baselineHandlers = []
+
+    def _create_handler(self, configRuleName, resourceType, handlingMethod):
+        return {
+            'configRuleName': _required(configRuleName, 'configRuleName'),
+            'resourceType': _required(resourceType, 'resourceType'),
+            'handlingMethod': _required(handlingMethod, 'handlingMethod')
+        }
+
+    def _select_handling_table(self, action):
+        if action == 'remediate': return self._remediationHandlers    
+        if action == 'baseline': return self._baselineHandlers
+        erm = "Unsupported handler table type `{}`".format(action)
+        raise RuleSoftwareError(erm)
+
+    def _select_handling_method(self, configRuleName, action, resourceType):
+        handlingTable = self._select_handling_table(action)
+        for handler in handlingTable:
             if handler['configRuleName'] != configRuleName: continue
             if handler['resourceType'] != resourceType: continue
             return handler['handlingMethod']
-        erm = "No handling method defined for {} and {}".format(configRuleName, resourceType)
-        raise RuleImplementationError(erm)
+        erm = "No handling method defined for rule `{}`, type `{}`, and action `{}`".format(configRuleName, resourceType, action)
+        raise RuleConfigurationError(erm)
 
-    def _session_name(self, configRuleName):
-        out = 'remediate-' + configRuleName
+    def _required_action(self, target):
+        actionSet= set(['remediate','baseline'])
+        action = _defaulted_value(target, 'action', 'remediate')
+        if action in actionSet: return action
+        erm = "Unsupported action `{}`".format(action)
+        raise RuleSoftwareError(erm)
+    
+    def _required_resourceId(self, target, action):
+        if action == 'baseline': return '*'
+        return _required_value(target, 'resourceId')
+
+    def _session_name(self, action, configRuleName):
+        out = "{}-{}".format(action, configRuleName)
         return out[0:64]
 
-    def _remediate_imp(self, event):
-        configRuleName = _required_value(event, 'configRuleName')
-        action = _defaulted_value(event, 'action', 'remediate')
-        isPreview = _defaulted_value(event, 'preview', True)
-        target = _required_value(event, 'target')
-        resourceType = _required_value(target, 'resourceType')
-        resourceId = _required_value(target, 'resourceId')
-        handlingMethod = self._select_handling_method(configRuleName, resourceType)
-        awsAccountId = _required_value(target, 'awsAccountId')
-        awsAccountName = _required_value(target, 'awsAccountName')
-        awsAccountEmail = _required_value(target, 'awsAccountEmail')
-        awsRegion = _required_value(target, 'awsRegion')
-        roleName = _required_value(target, 'roleName')
-        taskProps = {
-            'configRuleName': configRuleName,
-            'action': action,
-            'isPreview': isPreview,
-            'resourceType': resourceType,
-            'resourceId': resourceId,
-            'accountId': awsAccountId,
-            'accountName': awsAccountName,
-            'accountEmail': awsAccountEmail,
-            'regionName': awsRegion,
-            'conformancePackName': _required_value(event, 'conformancePackName'),
-            'manualTagName': _required_value(event, 'manualTagName'),
-            'autoResourceTags': _required_value(event, 'autoResourceTags'),
-            'stackNamePattern': _required_value(event, 'stackNamePattern'),
-            'deploymentMethod': _defaulted_value(event, 'deploymentMethod', {})
-        }
-        task = Task(taskProps)
-        sessionName = self._session_name(configRuleName)
+    def _action_task(self, handlingMethod, task :Task):
         try:
+            action = task.action
+            awsAccountId = task.accountId
+            awsRegion = task.regionName
+            configRuleName = task.configRuleName
+            isPreview = task.isPreview
+            roleName = task.roleName
+            sessionName = self._session_name(action, configRuleName)
             fromProfile = Profile(regionName=awsRegion)
             if roleName == 'LOCAL':
                 targetProfile = fromProfile
@@ -168,41 +187,83 @@ class RuleMain:
                 'remediationResponse': remediationResponse
             }
         except RuleTimeoutError as e:
-            logging.warning("Timeout in remediation handler. | Cause: %s | Task: %s", e.message, task)
+            logging.warning("Timeout in %s handler. | Cause: %s | Task: %s", action, e.message, task)
             return {
                 'remediationTimeout': e.message
             }
         except RdqTimeout as e:
-            logging.warning("RdqTimeout in remediation handler. | Cause: %s | Task: %s", e.message, task)
+            logging.warning("RdqTimeout in %s handler. | Cause: %s | Task: %s", action, e.message, task)
             return {
                 'remediationTimeout': e.message
             }
         except RdqError as e:
-            ectx = {
-                "configRuleName": configRuleName,
-                "resourceType": resourceType,
-                "resourceId": resourceId,
-                "targetAccountId": awsAccountId,
-                "roleName": roleName
-            }
-            logging.error("RdqError in remediation handler. | Cause: %s | Context: %s", e.message, ectx)
+            logging.error("RdqError in %s handler. | Cause: %s | Task: %s", action, e.message, task)
             return {
-                'remediationFailure': e.message
+                'remediationFailure': e.message,
+                'failureType': 'API'
+            }
+        except RuleConfigurationError as e:
+            logging.error("RuleConfigurationError in %s handler. | Cause: %s | Task: %s", action, e.message, task)
+            return {
+                'remediationFailure': e.message,
+                'failureType': 'Configuration'
+            }
+        except RuleSoftwareError as e:
+            logging.error("RuleSoftwareError in %s handler. | Cause: %s | Task: %s", action, e.message, task)
+            return {
+                'remediationFailure': e.message,
+                'failureType': 'Software'
             }
 
-    def addHandler(self, configRuleName, resourceType, handlingMethod):
-        handler = {
-            'configRuleName': _required(configRuleName, 'configRuleName'),
-            'resourceType': _required(resourceType, 'resourceType'),
-            'handlingMethod': _required(handlingMethod, 'handlingMethod')
-        }
-        self._handlers.append(handler)
-    
-    def remediate(self, event):
+    def addRemediationHandler(self, configRuleName :str, resourceType :str, handlingMethod :Callable[[Profile, Task], dict]):
+        handler = self._create_handler(configRuleName, resourceType, handlingMethod)
+        self._remediationHandlers.append(handler)
+
+    def addBaselineHandler(self, configRuleName :str, resourceType :str, handlingMethod :Callable[[Profile, Task], dict]):
+        handler = self._create_handler(configRuleName, resourceType, handlingMethod)
+        self._baselineHandlers.append(handler)
+
+    def action(self, event):
         try:
-            return self._remediate_imp(event)
-        except RuleImplementationError as e:
-            logging.error("RuleImplementationError in remediation main. | Cause: %s | Event: %s", e.message, event)
+            configRuleName = _required_value(event, 'configRuleName')
+            action = self._required_action(event)
+            isPreview = _defaulted_value(event, 'preview', True)
+            target = _required_value(event, 'target')
+            resourceType = _required_value(target, 'resourceType')
+            handlingMethod = self._select_handling_method(configRuleName, action, resourceType)
+            resourceId = self._required_resourceId(target, action)
+            awsAccountId = _required_value(target, 'awsAccountId')
+            awsAccountName = _required_value(target, 'awsAccountName')
+            awsAccountEmail = _required_value(target, 'awsAccountEmail')
+            awsRegion = _required_value(target, 'awsRegion')
+            taskProps = {
+                'configRuleName': configRuleName,
+                'action': action,
+                'isPreview': isPreview,
+                'resourceType': resourceType,
+                'resourceId': resourceId,
+                'accountId': awsAccountId,
+                'accountName': awsAccountName,
+                'accountEmail': awsAccountEmail,
+                'regionName': awsRegion,
+                'roleName': _required_value(target, 'roleName'),
+                'conformancePackName': _required_value(event, 'conformancePackName'),
+                'manualTagName': _required_value(event, 'manualTagName'),
+                'autoResourceTags': _required_value(event, 'autoResourceTags'),
+                'stackNamePattern': _required_value(event, 'stackNamePattern'),
+                'deploymentMethod': _defaulted_value(event, 'deploymentMethod', {})
+            }
+            task = Task(taskProps)
+            return self._action_task(handlingMethod, task)
+        except RuleConfigurationError as e:
+            logging.error("RuleConfigurationError in task setup| Cause: %s | Event: %s", e.message, event)
             return {
-                'remediationFailure': e.message
+                'remediationFailure': e.message,
+                'failureType': 'Configuration'
+            }
+        except RuleSoftwareError as e:
+            logging.error("RuleSoftwareError in in task setup | Cause: %s | Event: %s", e.message, event)
+            return {
+                'remediationFailure': e.message,
+                'failureType': 'Software'
             }

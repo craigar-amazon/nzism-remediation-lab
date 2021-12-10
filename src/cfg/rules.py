@@ -1,45 +1,61 @@
 import cfg.base as base
+from cfg import RuleTable
 
-ruleTable = {}
-ruleTable['s3-account-level-public-access-blocks-periodic'] = {
-    'Folder': 'ApplyS3BPA'
-}
-ruleTable['cloudwatch-log-group-encrypted'] = {
+# General format for config settings is:
+# <property>.<action>.<accountName> - e.g. Deploy.baseline.networks
+# Omit the <accountName> suffix to define the default for all accounts
+# Omit the <action> suffix to define the default for all actions and accounts
+
+ruleTable = RuleTable()
+ruleTable.put('s3-account-level-public-access-blocks-periodic', {
+    'Folder': 'ApplyS3BPA',
+    'CanBaseline': True,
+    'NZISM': 'CID:2022'
+})
+
+ruleTable.put('cloudwatch-log-group-encrypted', {
     'Folder': 'EncryptCWL',
-    'Preview': True,
+    'CanBaseline': True,
+    'NZISM': 'CID:3548,CID:3562,CID:4838',
+    'Preview': False,
     'Deploy': {
         'CreateStack': False,
         'StackMaxSecs': base.stackMaxSecs
     }
-}
+})
 
-def codeFolder(configRuleName, accountName):
-    rule :dict = ruleTable.get(configRuleName)
-    return rule.get('Folder') if rule else None
+def codeFolder(configRuleName, action, accountName):
+    return ruleTable.lookup(configRuleName, 'Folder')
 
-def action(configRuleName, accountName):
-    rule :dict = ruleTable.get(configRuleName)
-    return rule.get('Action') if rule else None
+def isPreview(configRuleName, action, accountName):
+    return ruleTable.lookup(configRuleName, 'Preview', True)
 
-def isPreview(configRuleName, accountName):
-    rule :dict = ruleTable.get(configRuleName)
-    return rule.get('Preview', True) if rule else True
+def canRemediate(configRuleName, action, accountName):
+    return ruleTable.lookup(configRuleName, 'CanRemediate', True)
 
-def deploymentMethod(configRuleName, accountName):
-    rule :dict = ruleTable.get(configRuleName)
-    return rule.get('Deploy') if rule else None
+def canBaseline(configRuleName, action, accountName):
+    return ruleTable.lookup(configRuleName, 'CanBaseline', False)
+
+def deploymentMethod(configRuleName, action, accountName):
+    return ruleTable.lookup(configRuleName, 'Deploy')
+
+def stackNamePattern(configRuleName, action, accountName):
+    return "NZISM-AutoDeployed-{}"
+
+def manualRemediationTagName(configRuleName, action, accountName):
+    return 'ManualRemediation'
+
+def autoResourceTags(configRuleName, action, accountName):
+    tags = {
+        'AutoDeployed': 'True',
+        'AutoDeploymentReason': 'NZISM Conformance'
+    }
+    cpName = conformancePackName()
+    cpTag = ruleTable.lookup(configRuleName, cpName, None, action, accountName)
+    if cpTag:
+        tags[cpName] = cpTag
+    return tags
 
 def conformancePackName():
     return "NZISM"
 
-def stackNamePattern(configRuleName, accountName):
-    return "NZISM-AutoDeployed-{}"
-
-def manualRemediationTagName(configRuleName, accountName):
-    return 'ManualRemediation'
-
-def autoResourceTags(configRuleName, accountName):
-    return {
-        'AutoDeployed': 'True',
-        'AutoDeploymentReason': 'NZISM Conformance'
-    }

@@ -29,9 +29,10 @@ class TestRule(unittest.TestCase):
         util.show_reminder_dispatchingAudit()
         preview = False
         resourceId = '/aws/lambda/UnitTest1Lambda'
+        action = 'baseline'
         deploymentMethod = {'CreateStack': False, 'StackMaxSecs': 300}
         try:
-            response = util.run_local(preview, _configRuleName, _resourceType, resourceId, _action, deploymentMethod, _setupHandler, lambda_handler)
+            response = util.run_local(preview, _configRuleName, _resourceType, resourceId, action, deploymentMethod, _setupHandler, lambda_handler)
             logging.info("%s", json.dumps(response))
             self.assertTrue(response)
         except Exception as e:

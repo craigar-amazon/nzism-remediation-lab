@@ -63,6 +63,30 @@ def setup_targetAccount():
     print("Account {} can be used as target for {}".format(profile.accountId, trustAccountId))
     return profile.accountId
 
+# {
+#     'action': 'remediate',
+#     'preview': True,
+#     'conformancePackName': 'NZISM',
+#     'configRuleName': 's3-account-level-public-access-blocks-periodic',
+#     'manualTagName': 'ManualRemediation',
+#     'autoResourceTags': {
+#         'AutoDeployed': 'True',
+#         'AutoDeploymentReason': 'NZISM Conformance',
+#         'NZISM': 'CID:2022'
+#     },
+#     'stackNamePattern': 'NZISM-AutoDeployed-{}',
+#     'deploymentMethod': {},
+#     'target': {
+#         'awsAccountId': '119399605612',
+#         'awsAccountName': 'Application-1',
+#         'awsAccountEmail': 'craigar+ctapp1@amazon.com',
+#         'awsRegion': 'ap-southeast-2',
+#         'roleName': 'aws-controltower-AdministratorExecutionRole',
+#         'resourceType': 'AWS::::Account',
+#         'resourceId': '119399605612'
+#     }
+# }
+
 def run_local(preview, configRuleName, resourceType, resourceId, action, deploymentMethod, setupFunction, lambdaFunction):
     profile = Profile()
     roleName = 'LOCAL'

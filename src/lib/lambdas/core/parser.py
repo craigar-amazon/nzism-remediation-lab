@@ -86,6 +86,7 @@ def create_dispatch(record):
     logging.info("Received Compliance Event: %s", dispatch)
     complianceType = dispatch['complianceType']
     if complianceType == 'NON_COMPLIANT':
+        dispatch['action'] = 'remediate'
         return dispatch
     return None
 
@@ -135,39 +136,40 @@ class Parser:
             raise ConfigError(erm)
         return targetRole
 
-    def get_action(self, configRuleName, accountName):
-        action = cfgrules.action(configRuleName, accountName)
-        if action: return action
-        return 'remediate'
+    def get_preview(self, configRuleName, action, accountName):
+        preview = cfgrules.isPreview(configRuleName, action, accountName)
+        if not (preview is None): return preview
+        return True
 
-    def get_preview(self, configRuleName, accountName):
-        preview = cfgrules.isPreview(configRuleName, accountName)
-        if preview is None: return True
-        return preview
+    def get_deployment_method(self, configRuleName, action, accountName):
+        dm = cfgrules.deploymentMethod(configRuleName, action, accountName)
+        if not (dm is None): return dm
+        return {}
 
-    def get_manual_tag_name(self, configRuleName, accountName):
-        tagName = cfgrules.manualRemediationTagName(configRuleName, accountName)
-        if tagName: return tagName
+    def get_stack_name_pattern(self, configRuleName, action, accountName):
+        pattern = cfgrules.stackNamePattern(configRuleName, action, accountName)
+        if not (pattern is None): return pattern
+        conformancePackName = cfgrules.conformancePackName()
+        pattern = conformancePackName + "-AutoDeploy-{}"
+        return pattern
+
+    def get_manual_tag_name(self, configRuleName, action, accountName):
+        tagName = cfgrules.manualRemediationTagName(configRuleName, action, accountName)
+        if not (tagName is None): return tagName
         tagName = "DoNotAutoRemediate"
         logging.warning("No manual remediation tag defined for rule %s; will use %s", configRuleName, tagName)
         return tagName
 
-    def get_auto_resource_tags(self, configRuleName, accountName):
-        tags = cfgrules.autoResourceTags(configRuleName, accountName)
-        if tags: return tags
+    def get_auto_resource_tags(self, configRuleName, action, accountName):
+        tags = cfgrules.autoResourceTags(configRuleName, action, accountName)
+        if not (tags is None): return tags
         tags = {'AutoDeployed': 'True'}
         logging.warning("No tags defined for auto-deployed resources by rule %s; will use %s", configRuleName, tags)
         return tags
 
-    def get_stack_name_pattern(self, configRuleName, accountName):
-        pattern = cfgrules.stackNamePattern(configRuleName, accountName)
-        if pattern: return pattern
-        conformancePackName = cfgrules.conformancePackName()
-        pattern = conformancePackName + "-AutoDeploy-{}"
-        logging.warning("No stack name pattern defined for auto-deployed stacks by rule %s; will use %s", configRuleName, pattern)
-        return pattern
 
     def create_invoke(self, optLandingZone, dispatch):
+        action = dispatch['action']
         targetAccountId = dispatch['awsAccountId']
         optTargetDesc = self.get_account_desc(optLandingZone, targetAccountId)
         if not optTargetDesc: return None
@@ -175,9 +177,9 @@ class Parser:
         targetAccountName = optTargetDesc['Name']
         targetAccountEmail = optTargetDesc['Email']
         configRuleName = dispatch['configRuleNameBase']
-        ruleCodeFolder = cfgrules.codeFolder(configRuleName, targetAccountName)
+        ruleCodeFolder = cfgrules.codeFolder(configRuleName, action, targetAccountName)
         if not ruleCodeFolder:
-            logging.info("No auto remediation defined for rule %s and account %s", configRuleName, targetAccountName)
+            logging.info("No %s implementation defined for rule %s and account %s", action, configRuleName, targetAccountName)
             return None
         functionName = cfginstall.ruleFunctionName(ruleCodeFolder)
         target = {}
@@ -190,12 +192,13 @@ class Parser:
         target['resourceId'] = dispatch['resourceId']
         event = {}
         event['configRuleName'] = configRuleName
-        event['action'] = self.get_action(configRuleName, targetAccountName)
-        event['preview'] = self.get_preview(configRuleName, targetAccountName)
+        event['action'] = action
         event['conformancePackName'] = cfgrules.conformancePackName()
-        event['manualTagName'] = self.get_manual_tag_name(configRuleName, targetAccountName)
-        event['autoResourceTags'] = self.get_auto_resource_tags(configRuleName, targetAccountName)
-        event['stackNamePattern'] = self.get_stack_name_pattern(configRuleName, targetAccountName)
+        event['preview'] = self.get_preview(configRuleName, action, targetAccountName)
+        event['deploymentMethod'] = self.get_deployment_method(configRuleName, action, targetAccountName)
+        event['manualTagName'] = self.get_manual_tag_name(configRuleName, action, targetAccountName)
+        event['autoResourceTags'] = self.get_auto_resource_tags(configRuleName, action, targetAccountName)
+        event['stackNamePattern'] = self.get_stack_name_pattern(configRuleName, action, targetAccountName)
         event['target'] = target
         return {'functionName': functionName, 'event': event}
 
