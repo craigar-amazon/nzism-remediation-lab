@@ -6,7 +6,7 @@ import cfg.rules as cfgrules
 
 from lib.rdq import Profile
 from lib.base import ConfigError
-from lib.lambdas.discover import Discover
+from lib.lambdas.discovery import LandingZoneDiscovery
 
 keywordLocalAccount = 'LOCAL'
 
@@ -105,7 +105,7 @@ def createDispatchList(event):
 class Parser:
     def __init__(self, profile :Profile):
         self._profile = profile
-        self._discover = Discover(profile)
+        self._discover = LandingZoneDiscovery(profile)
 
     def get_account_desc(self, optLandingZone, accountId):
         if not optLandingZone:

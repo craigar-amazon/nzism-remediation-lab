@@ -12,7 +12,7 @@ def isLandingZoneDiscoveryEnabled():
     if not lzsearch: return False
     return len(lzsearch) > 1
 
-class Discover:
+class LandingZoneDiscovery:
     def __init__(self, profile :Profile):
         self._profile = profile
         self._iamClient = IamClient(profile)

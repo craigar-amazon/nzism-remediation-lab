@@ -1,6 +1,5 @@
 import logging
 
-from lib.base import Tags
 from lib.rule import Task, RuleTimeoutError
 
 from lib.rdq import Profile

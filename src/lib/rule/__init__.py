@@ -5,6 +5,7 @@ import time
 from typing import Callable
 
 from lib.base import initLogging, Tags
+import lib.base.ruleresponse as rr
 from lib.rdq import Profile, RdqError, RdqTimeout
 
 
@@ -60,6 +61,7 @@ def _defaulted_value(src, propName, defValue):
     if propName in src: return src[propName]
     return defValue
 
+
 class Task:
     def __init__(self, props):
         self._props = props
@@ -97,7 +99,7 @@ class Task:
     def manualTagName(self): return self._props['manualTagName']
 
     @property
-    def autoResourceTags(self) -> dict: return self._autoResourceTags
+    def autoResourceTags(self) -> Tags: return self._autoResourceTags
 
     @property
     def stackNamePattern(self): return self._props['stackNamePattern']
@@ -162,7 +164,7 @@ class RuleMain:
         out = "{}-{}".format(action, configRuleName)
         return out[0:64]
 
-    def _action_task(self, handlingMethod, task :Task):
+    def _action_task(self, handlingMethod :Callable[[Profile, Task], rr.ActionResponse], task :Task):
         try:
             action = task.action
             awsAccountId = task.accountId
@@ -178,55 +180,45 @@ class RuleMain:
                 targetProfile = fromProfile.assumeRole(awsAccountId, roleName, awsRegion, sessionName)
             targetProfile.enablePreview(isPreview)
             previewResponse = {}
-            remediationResponse = handlingMethod(targetProfile, task)
+            actionResponse = handlingMethod(targetProfile, task)
             if targetProfile.isPreviewing:
                 previewResponse = targetProfile.enablePreview(False)
-            return {
-                'isPreview': isPreview,
-                'previewResponse': previewResponse,
-                'remediationResponse': remediationResponse
-            }
+                actionResponse.putPreview(previewResponse)
+            return actionResponse
         except RuleTimeoutError as e:
             logging.warning("Timeout in %s handler. | Cause: %s | Task: %s", action, e.message, task)
-            return {
-                'remediationTimeout': e.message
-            }
+            return rr.ActionTimeoutConfiguration(action, e.message)
         except RdqTimeout as e:
             logging.warning("RdqTimeout in %s handler. | Cause: %s | Task: %s", action, e.message, task)
-            return {
-                'remediationTimeout': e.message
-            }
+            return rr.ActionTimeoutRdq(action, e.message)
         except RdqError as e:
             logging.error("RdqError in %s handler. | Cause: %s | Task: %s", action, e.message, task)
-            return {
-                'remediationFailure': e.message,
-                'failureType': 'API'
-            }
+            return rr.ActionFailureRdq(action, e.message)
         except RuleConfigurationError as e:
             logging.error("RuleConfigurationError in %s handler. | Cause: %s | Task: %s", action, e.message, task)
-            return {
-                'remediationFailure': e.message,
-                'failureType': 'Configuration'
-            }
+            return rr.ActionFailureConfiguration(action, e.message)
         except RuleSoftwareError as e:
             logging.error("RuleSoftwareError in %s handler. | Cause: %s | Task: %s", action, e.message, task)
-            return {
-                'remediationFailure': e.message,
-                'failureType': 'Software'
-            }
+            return rr.ActionFailureSoftware(action, e.message)
+        except Exception as e:
+            erm = str(type(e))
+            logging.exception("General error in %s handler | Type: %s | Cause: %s | Task: %s", action, erm, e, task)
+            return rr.ActionFailure(action, e.message)
 
-    def addRemediationHandler(self, configRuleName :str, resourceType :str, handlingMethod :Callable[[Profile, Task], dict]):
+    def addRemediationHandler(self, configRuleName :str, resourceType :str, handlingMethod :Callable[[Profile, Task], rr.RemediationResponse]):
         handler = self._create_handler(configRuleName, resourceType, handlingMethod)
         self._remediationHandlers.append(handler)
 
-    def addBaselineHandler(self, configRuleName :str, resourceType :str, handlingMethod :Callable[[Profile, Task], dict]):
+    def addBaselineHandler(self, configRuleName :str, resourceType :str, handlingMethod :Callable[[Profile, Task], rr.BaselineResponse]):
         handler = self._create_handler(configRuleName, resourceType, handlingMethod)
         self._baselineHandlers.append(handler)
 
     def action(self, event):
+        action = 'setup'
+        actionResponse = rr.ActionFailure(action, "Init")
         try:
-            configRuleName = _required_value(event, 'configRuleName')
             action = self._required_action(event)
+            configRuleName = _required_value(event, 'configRuleName')
             isPreview = _defaulted_value(event, 'preview', True)
             target = _required_value(event, 'target')
             resourceType = _required_value(target, 'resourceType')
@@ -254,16 +246,15 @@ class RuleMain:
                 'deploymentMethod': _defaulted_value(event, 'deploymentMethod', {})
             }
             task = Task(taskProps)
-            return self._action_task(handlingMethod, task)
+            actionResponse = self._action_task(handlingMethod, task)
         except RuleConfigurationError as e:
             logging.error("RuleConfigurationError in task setup| Cause: %s | Event: %s", e.message, event)
-            return {
-                'remediationFailure': e.message,
-                'failureType': 'Configuration'
-            }
+            actionResponse = rr.ActionFailureConfiguration(action, e.message)
         except RuleSoftwareError as e:
             logging.error("RuleSoftwareError in in task setup | Cause: %s | Event: %s", e.message, event)
-            return {
-                'remediationFailure': e.message,
-                'failureType': 'Software'
-            }
+            actionResponse = rr.ActionFailureSoftware(action, e.message)
+        except Exception as e:
+            erm = str(type(e))
+            logging.exception("General error in task setup | Type: %s | Cause: %s | Event: %s", erm, e, event)
+            actionResponse = rr.ActionFailure(action, erm)
+        return actionResponse.toDict()

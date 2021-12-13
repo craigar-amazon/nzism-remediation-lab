@@ -18,6 +18,7 @@ ruleTable.put('cloudwatch-log-group-encrypted', {
     'CanBaseline': True,
     'NZISM': 'CID:3548,CID:3562,CID:4838',
     'Preview': False,
+    'ExcludedResourceIds': '.*aws-controltower.*',
     'Deploy': {
         'CreateStack': False,
         'StackMaxSecs': base.stackMaxSecs
@@ -38,6 +39,12 @@ def canBaseline(configRuleName, action, accountName):
 
 def deploymentMethod(configRuleName, action, accountName):
     return ruleTable.lookup(configRuleName, 'Deploy')
+
+def includedResourceIds(configRuleName, action, accountName):
+    return ruleTable.lookup(configRuleName, 'IncludedResourceIds')
+
+def excludedResourceIds(configRuleName, action, accountName):
+    return ruleTable.lookup(configRuleName, 'ExcludedResourceIds')
 
 def stackNamePattern(configRuleName, action, accountName):
     return "NZISM-AutoDeployed-{}"

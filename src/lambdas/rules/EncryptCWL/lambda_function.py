@@ -1,8 +1,8 @@
+import lib.base.ruleresponse as response
+
 from lib.rdq import Profile
 from lib.rule import RuleMain, Task
 from lib.rule.cmk import CMKResolver
-
-import lib.base.ruleresponse as response
 
 import lib.cfn.iam as iam
 import lib.cfn.kms as kms

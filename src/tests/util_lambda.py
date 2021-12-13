@@ -1,3 +1,4 @@
+from lib.base import Tags
 from lib.rdq import Profile
 from lib.rdq.svciam import IamClient
 from lib.rdq.svclambda import LambdaClient
@@ -173,14 +174,15 @@ def run_invoke(preview, configRuleName, resourceType, resourceId, action, deploy
             'resourceId': resourceId
         }
     }
-    functionCfg = cfginstall.ruleFunctionCfg()
+    functionCfg = cfginstall.ruleFunctionCfg(codeFolder)
+    tagsRule = Tags(cfginstall.ruleResourceTags(), "ruleResourceTags")
     codeZip = codeLoader.getTestCode(codeFolder)
     profile = Profile()
     lambdac = LambdaClient(profile)
     functionName = "UnitTest-{}".format(codeFolder)
     functionDescription = "UnitTest {} Lambda".format(codeFolder)
     roleArn = profile.getRoleArn(lambdaRoleName)
-    lambdaArn = lambdac.declareFunctionArn(functionName, functionDescription, roleArn, functionCfg, codeZip)
+    lambdaArn = lambdac.declareFunctionArn(functionName, functionDescription, roleArn, functionCfg, codeZip, tagsRule)
     print("Unit Test Lambda Deployed: {}".format(lambdaArn))
     targetProfile = profile.assumeRole(toAccountId, prepRoleName, profile.regionName, 'InvokeTestPrepare')
     if setupFunction:

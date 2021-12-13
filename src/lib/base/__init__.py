@@ -20,6 +20,7 @@ def initLogging(logLevelVariable='LOGLEVEL', defaultLevel='INFO'):
     logger.setLevel(loglevel)
     logging.info("Logging level is %s", logging.getLevelName(loglevel))
 
+
 class ConfigError(Exception):
     def __init__(self, message):
         self._message = message
@@ -39,9 +40,9 @@ def selectConfig(srcmap, context, aname):
     return srcmap[aname]
 
 class Tags:
-    def __init__(self, tags=None, context=None):
+    def __init__(self, tagSource=None, context=None):
         self._map = {}
-        self.update(tags, context)
+        self.update(tagSource, context)
 
     def isEmpty(self):
         return len(self._map) == 0
@@ -55,6 +56,12 @@ class Tags:
     def putAll(self, **kwargs):
         for kwd in kwargs:
             self._map[kwd] = str(kwargs[kwd])
+
+    def isEnabled(self, kwd):
+        if not (kwd in self._map): return False
+        val = self._map[kwd]
+        cval = 'true' if len(val) == 0 else val.lower()
+        return cval != 'false'
 
     def get(self, kwd):
         return self._map.get(kwd)

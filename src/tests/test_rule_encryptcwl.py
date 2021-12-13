@@ -29,7 +29,7 @@ class TestRule(unittest.TestCase):
         util.show_reminder_dispatchingAudit()
         preview = False
         resourceId = '/aws/lambda/UnitTest1Lambda'
-        action = 'baseline'
+        action = 'remediate'
         deploymentMethod = {'CreateStack': False, 'StackMaxSecs': 300}
         try:
             response = util.run_local(preview, _configRuleName, _resourceType, resourceId, action, deploymentMethod, _setupHandler, lambda_handler)
@@ -52,9 +52,9 @@ class TestRule(unittest.TestCase):
     def test_invoke(self):
         util.show_reminder_dispatchingAudit()
         resourceId = '/aws/lambda/UnitTest1Lambda'
-        deploymentMethod = {'CreateStack': True, 'StackMaxSecs': 300}
+        deploymentMethod = {'CreateStack': False, 'StackMaxSecs': 300}
         try:
-            response = util.run_invoke(_isPreview, _configRuleName, _resourceType, resourceId, _action, deploymentMethod, _setupHandler, _codeFolder())
+            response = util.run_invoke(_isPreview, _configRuleName, _resourceType, resourceId, _action, deploymentMethod, _setupHandler, _codeFolder)
             print("Lambda Response: {}".format(response))
             self.assertTrue(response)
         except Exception as e:
@@ -63,5 +63,5 @@ class TestRule(unittest.TestCase):
 if __name__ == '__main__':
     initLogging(None, 'INFO')
     loader = unittest.TestLoader()
-    loader.testMethodPrefix = "test_local"
+    loader.testMethodPrefix = "test_invoke"
     unittest.main(warnings='default', testLoader = loader)

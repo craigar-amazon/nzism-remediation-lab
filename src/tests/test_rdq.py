@@ -9,7 +9,8 @@ from lib.rdq.svcsqs import SQSClient
 from lib.rdq.svceventbridge import EventBridgeClient
 from lib.rdq.svccfn import CfnClient
 import lib.rdq.policy as policy
-import lib.lambdas.discover as discover
+import lib.lambdas.discovery as discovery
+from lib.lambdas.discovery import LandingZoneDiscovery
 
 import lib.cfn as cfn
 import lib.cfn.iam as iam
@@ -261,8 +262,10 @@ class TestRdq(unittest.TestCase):
         functionDescription = 'Compliance Dispatcher Lambda'
         functionCfg = cfgInstaller.coreFunctionCfg()
 
-        isLandingZoneDiscoveryEnabled = discover.isLandingZoneDiscoveryEnabled()
-        landingZoneConfig = discover.discoverLandingZone(profile)
+        isLandingZoneDiscoveryEnabled = discovery.isLandingZoneDiscoveryEnabled()
+        landingZoneDiscovery = LandingZoneDiscovery(profile)
+
+        landingZoneConfig = landingZoneDiscovery.discoverLandingZone()
 
         ebc.declareEventBusArn(eventBusName, tagsCore)
         ruleArn = ebc.declareEventBusRuleArn(eventBusName, ruleName, ruleDescription, eventPattern, tagsCore)
@@ -400,7 +403,7 @@ class TestRdq(unittest.TestCase):
 if __name__ == '__main__':
     initLogging(None, 'INFO')
     loader = unittest.TestLoader()
-    loader.testMethodPrefix = "test_stack_local"
+    loader.testMethodPrefix = "test_dispatcher"
     unittest.main(warnings='default', testLoader = loader)
     # setup_assume_role('746869318262')
     # test_assume_role('119399605612')
