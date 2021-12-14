@@ -4,8 +4,7 @@ from lib.rdq.svciam import IamClient
 from lib.rdq.svclambda import LambdaClient
 import lib.rdq.policy as policy
 import cmds.codeLoader as codeLoader
-import cfg.installer as cfginstall
-import cfg.rules as cfgrules
+import cfg.core as cfgCore
 
 def targetAccountId():
     return '119399605612'
@@ -174,8 +173,8 @@ def run_invoke(preview, configRuleName, resourceType, resourceId, action, deploy
             'resourceId': resourceId
         }
     }
-    functionCfg = cfginstall.ruleFunctionCfg(codeFolder)
-    tagsRule = Tags(cfginstall.ruleResourceTags(), "ruleResourceTags")
+    functionCfg = cfgCore.ruleFunctionCfg(codeFolder)
+    tagsRule = Tags(cfgCore.ruleResourceTags(), "ruleResourceTags")
     codeZip = codeLoader.getTestCode(codeFolder)
     profile = Profile()
     lambdac = LambdaClient(profile)

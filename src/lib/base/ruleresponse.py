@@ -15,29 +15,37 @@ class ActionResponse:
     def putPreview(self, preview: dict):
         self._props['preview'] = preview
 
+    @property
     def action(self) -> str:
         return self._props.get('action', 'general')
 
+    @property
     def major(self) -> str:
         return self._props.get('major', 'Failure')
 
+    @property
     def minor(self) -> str:
         return self._props.get('minor', 'Software')
 
+    @property
     def message(self) -> str:
         return self._props.get('message', 'Unspecified')
 
+    @property
     def preview(self) -> dict:
         return self._props.get('preview', {})
 
+    @property
     def isSuccess(self) -> bool:
-        return self.major() == 'Success'
+        return self.major == 'Success'
 
+    @property
     def isFailure(self) -> bool:
-        return self.major() == 'Failure'
+        return self.major == 'Failure'
 
+    @property
     def isTimeout(self) -> bool:
-        return self.major() == 'Timeout'
+        return self.major == 'Timeout'
 
     def toDict(self, excludePreview=True) -> dict:
         result = dict()

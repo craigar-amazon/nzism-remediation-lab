@@ -1,8 +1,8 @@
 import json
 import botocore
 
-from lib.base import Tags, DeltaBuild
-from lib.rdq import RdqError, RdqTimeout
+from lib.base import Tags
+from lib.rdq import RdqError
 from lib.rdq.base import ServiceUtils
 
 class LogGroupDescriptor:

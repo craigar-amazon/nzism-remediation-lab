@@ -22,7 +22,6 @@ def coreFunctionName(codeFolder):
 def ruleFunctionName(codeFolder):
     return "NZISM-AutoRemediation-{}".format(codeFolder)
 
-
 def coreResourceName(baseName):
     return "NZISM-{}".format(baseName)
 
@@ -57,6 +56,9 @@ def coreQueueCfg():
             'MaximumBatchingWindowInSeconds': 0
         }
     }
+
+def coreCloudWatchNamespace(action):
+    return "NZISM-{}".format(action)
 
 def ruleResourceTags():
     return {

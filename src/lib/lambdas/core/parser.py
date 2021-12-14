@@ -1,7 +1,7 @@
 import logging
 import json
 
-import cfg.installer as cfginstall
+import cfg.core as cfgCore
 import cfg.rules as cfgrules
 
 from lib.rdq import Profile
@@ -180,7 +180,7 @@ class Parser:
         if not ruleCodeFolder:
             logging.info("No %s implementation defined for rule %s and account %s", action, configRuleName, targetAccountName)
             return None
-        functionName = cfginstall.ruleFunctionName(ruleCodeFolder)
+        functionName = cfgCore.ruleFunctionName(ruleCodeFolder)
         target = {}
         target['awsAccountId'] = targetAccountId
         target['awsAccountName'] = targetAccountName

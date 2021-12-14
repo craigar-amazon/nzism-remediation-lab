@@ -9,7 +9,6 @@ from lib.rdq.svcsqs import SQSClient
 from lib.rdq.svceventbridge import EventBridgeClient
 from lib.rdq.svccfn import CfnClient
 import lib.rdq.policy as policy
-import lib.lambdas.discovery as discovery
 from lib.lambdas.discovery import LandingZoneDiscovery
 
 import lib.cfn as cfn
@@ -19,7 +18,7 @@ import lib.cfn.kms as kms
 import lib.cfn.cloudwatchlogs as cwl
 
 
-import cfg.installer as cfgInstaller
+import cfg.core as cfgCore
 import cmds.codeLoader as codeLoader
 
 def setup_assume_role(callingAccountId):
@@ -226,28 +225,27 @@ class TestRdq(unittest.TestCase):
     def test_dispatcher(self):
         profile = Profile()
         iamc = IamClient(profile)
-        orgc = OrganizationClient(profile)
         kmsc = KmsClient(profile)
         lambdac = LambdaClient(profile)
         ebc = EventBridgeClient(profile)
         sqsc = SQSClient(profile)
 
-        queueCfg = cfgInstaller.coreQueueCfg()
+        queueCfg = cfgCore.coreQueueCfg()
         sqsVisibilityTimeoutSecs = queueCfg['SqsVisibilityTimeoutSecs']
         sqsPollCfg = queueCfg['SqsPollCfg']
 
-        ebCfg = cfgInstaller.coreEventBusCfg()
+        ebCfg = cfgCore.coreEventBusCfg()
         ebTargetMaxAgeSecs = ebCfg['RuleTargetMaxAgeSecs']
 
-        tagsCore = Tags(cfgInstaller.coreResourceTags(), "coreResourceTags")
+        tagsCore = Tags(cfgCore.coreResourceTags(), "coreResourceTags")
         tagsCore.putAll(Lifecycle="Unit Test")
-        tagsRule = Tags(cfgInstaller.ruleResourceTags(), "ruleResourceTags")
+        tagsRule = Tags(cfgCore.ruleResourceTags(), "ruleResourceTags")
         tagsRule.putAll(Lifecycle="Development")
 
         sqsCmkDescription = "Encryption for SQS queued events"
         sqsCmkAlias = "queued_events"
-        eventBusName = cfgInstaller.coreResourceName('AutoRemediation')
-        queueName = cfgInstaller.coreResourceName('ComplianceChangeQueue')
+        eventBusName = cfgCore.coreResourceName('AutoRemediation')
+        queueName = cfgCore.coreResourceName('ComplianceChangeQueue')
         ruleName = 'ComplianceChange'
         ruleDescription = "Config Rule Compliance Change"
         eventPattern = {
@@ -257,10 +255,10 @@ class TestRdq(unittest.TestCase):
         codeFolder = 'ComplianceDispatcher'
         codeZip = codeLoader.getCoreCode(codeFolder)
         lambdaRoleDescription = "Compliance Dispatcher Lambda Role"
-        lambdaRoleName = cfgInstaller.coreResourceName('ComplianceDispatcher-LambdaRole')
-        functionName = cfgInstaller.coreFunctionName(codeFolder)
+        lambdaRoleName = cfgCore.coreResourceName('ComplianceDispatcher-LambdaRole')
+        functionName = cfgCore.coreFunctionName(codeFolder)
         functionDescription = 'Compliance Dispatcher Lambda'
-        functionCfg = cfgInstaller.coreFunctionCfg()
+        functionCfg = cfgCore.coreFunctionCfg()
 
         landingZoneDiscovery = LandingZoneDiscovery(profile)
         landingZoneConfig = landingZoneDiscovery.discoverLandingZone()
@@ -285,10 +283,11 @@ class TestRdq(unittest.TestCase):
         roleArn = iamc.declareRoleArn(lambdaRoleName, lambdaRoleDescription, policy.trustLambda(), tagsCore)
         iamc.declareManagedPoliciesForRole(lambdaRoleName, [lambdaPolicyArn])
         policyMapSQS = policy.permissions([policy.allowConsumeSQS(sqsArn), policy.allowDecryptCMK(cmkarn)])
-        remediationLambdaNamePattern = "function:{}".format(cfgInstaller.ruleFunctionName("*"))
+        remediationLambdaNamePattern = "function:{}".format(cfgCore.ruleFunctionName("*"))
         remediationLambdaArn = profile.getRegionAccountArn('lambda', remediationLambdaNamePattern)
         policyMapInvoke = policy.permissions([policy.allowInvokeLambda(remediationLambdaArn)])
-        inlinePolicyMap = {"ConsumeQueue": policyMapSQS, "InvokeRemediations": policyMapInvoke}
+        policyMapOps = policy.permissions([policy.allowPutCloudWatchMetricData()])
+        inlinePolicyMap = {"ConsumeQueue": policyMapSQS, "InvokeRemediations": policyMapInvoke, "Operations": policyMapOps}
         if orgDesc:
             lzStatements = [policy.allowDescribeIam("*"), policy.allowDescribeAccount(orgDesc.masterAccountId, orgDesc.id)]
             inlinePolicyMap['LandingZone'] = policy.permissions(lzStatements)
@@ -301,15 +300,15 @@ class TestRdq(unittest.TestCase):
         ruleRoleArn = landingZoneConfig['AuditRoleArn']
         for ruleFolder in ruleFolders:
             rZip = codeLoader.getRuleCode(ruleFolder)
-            rFunctionName = cfgInstaller.ruleFunctionName(ruleFolder)
+            rFunctionName = cfgCore.ruleFunctionName(ruleFolder)
             rFunctionDescription = '{} Auto Remediation Lambda'.format(ruleFolder)
-            rFunctionCfg = cfgInstaller.ruleFunctionCfg(ruleFolder)
+            rFunctionCfg = cfgCore.ruleFunctionCfg(ruleFolder)
             rLambdaArn = lambdac.declareFunctionArn(rFunctionName, rFunctionDescription, ruleRoleArn, rFunctionCfg, rZip, tagsRule)
 
         print("Done")
 
         for ruleFolder in ruleFolders:
-            rFunctionName = cfgInstaller.ruleFunctionName(ruleFolder)
+            rFunctionName = cfgCore.ruleFunctionName(ruleFolder)
             lambdac.deleteFunction(rFunctionName)
         lambdac.deleteEventSourceMapping(functionName, sqsArn)
         lambdac.deleteFunction(functionName)
@@ -354,7 +353,7 @@ class TestRdq(unittest.TestCase):
 
 
     def test_stackset(self):
-        tagsCore = Tags(cfgInstaller.coreResourceTags(), "coreResourceTags")
+        tagsCore = Tags(cfgCore.coreResourceTags(), "coreResourceTags")
         stackSetName = "UnitTest1StackSet"
         stackSetDescription = "UnitTest1 Stack Set"
 

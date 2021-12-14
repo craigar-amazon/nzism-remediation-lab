@@ -4,7 +4,7 @@ import os
 from zipfile import ZipFile
 from zipfile import ZIP_STORED
 
-from cfg.installer import folderConfig
+from cfg.core import folderConfig
 
 class CodePathError(Exception):
     def __init__(self, message):

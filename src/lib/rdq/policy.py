@@ -92,6 +92,16 @@ def allowDescribeIam(roleArn, sid="DescribeIam"):
         'Resource': roleArn
     }
 
+def allowPutCloudWatchMetricData(sid="PutMetricData"):
+    return {
+        'Sid': sid,
+        'Effect': "Allow",
+        'Action': [
+            "cloudwatch:PutMetricData"
+        ],
+        'Resource': "*"
+    }
+
 def allowDescribeAccount(masterAccountId, organizationId, sid="DescribeAccount"):
     return {
         'Sid': sid,

@@ -1,32 +1,58 @@
 import logging
 
+import cfg.core as cfgCore
 import lib.base.ruleresponse as rr
 
-def analyzeResponse(functionName, event :dict, response :dict):
-    statusCode = response['StatusCode']
-    payload = response['Payload']
-    if statusCode != 200:
-        msg = "Function {} returned status code {}".format(functionName, statusCode)
-        logging.error("%s | Event: %s | Response: %s", msg, event, response)
-        return "retry"
 
-    ar = rr.ActionResponse(source=payload)
-    if ar.isTimeout():
-        head = "Function {} Timeout".format(functionName)
-        logging.error("%s | Response: %s | Event: %s", head, ar.toDict(), event)
-        return "retry"
+from lib.rdq import Profile
+from lib.rdq.svccwm import CwmClient
 
-    isPreview = event['preview']
-    if isPreview:
-        preview = ar.preview()
-        msg = "Function {} Preview".format(functionName)
-        logging.warning("%s | Result: %s", msg, preview)
 
-    if ar.isSuccess():
-        head = "Function {} Succeeded".format(functionName)
-        logging.info("%s | Response: %s | Event: %s", head, ar.toDict(), event)
-        return "done"
-    
-    head = "Function {} Failed".format(functionName)
-    logging.info("%s | Response: %s | Event: %s", head, ar.toDict(), event)
-    return "failed"
+class Analyzer:
+    def __init__(self, profile :Profile):
+        self._profile = profile
+        self._cwmclient = CwmClient(profile)
+
+    def analyzeResponse(self, functionName, event :dict, response :dict):
+        statusCode = response['StatusCode']
+        payload = response['Payload']
+        if statusCode != 200:
+            syn = "Function {} returned status code {}".format(functionName, statusCode)
+            report = {'Synopsis': syn, 'Response': response, 'Event': event}
+            logging.error(report)
+            return "retry"
+
+        ar = rr.ActionResponse(source=payload)
+        action = ar.action
+        cwNamespace = cfgCore.coreCloudWatchNamespace(action)
+        cwMetric = "{}.{}".format(ar.major, ar.minor)
+        target = event['target']
+        cwDimensionMap = {
+            'configRuleName': event['configRuleName'],
+            'regionName': target['awsRegion'],
+            'accountName': target['awsAccountName']
+        }
+        self._cwmclient.putCount(cwNamespace, cwMetric, cwDimensionMap)
+
+        if ar.isTimeout:
+            syn = "Function {} Timeout".format(functionName)
+            report = {'Synopsis': syn, 'Response': ar.toDict(), 'Event': event}
+            logging.error(report)
+            return "retry"
+
+        isPreview = event['preview']
+        if isPreview:
+            syn = "Function {} Preview".format(functionName)
+            report = {'Synopsis': syn, 'Preview': ar.preview}
+            logging.warning(report)
+
+        if ar.isSuccess:
+            syn = "Function {} Succeeded".format(functionName)
+            report = {'Synopsis': syn, 'Response': ar.toDict(), 'Event': event}
+            logging.info(report)
+            return "done"
+        
+        syn = "Function {} Failed".format(functionName)
+        report = {'Synopsis': syn, 'Response': ar.toDict(), 'Event': event}
+        logging.error(report)
+        return "failed"

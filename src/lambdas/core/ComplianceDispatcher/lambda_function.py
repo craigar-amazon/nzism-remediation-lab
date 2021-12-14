@@ -8,11 +8,12 @@ import lib.lambdas.core.analyzer as ca
 
 def make_invocations(profile, functionCallList):
     lambdac = LambdaClient(profile)
+    analyzer = ca.Analyzer(profile)
     for functionCall in functionCallList:
         functionName = functionCall['functionName']
         event = functionCall['event']
         functionResponse = lambdac.invokeFunctionJson(functionName, event)
-        ca.analyzeResponse(functionName, event, functionResponse)
+        analyzer.analyzeResponse(functionName, event, functionResponse)
 
 
 def lambda_handler(event, context):
