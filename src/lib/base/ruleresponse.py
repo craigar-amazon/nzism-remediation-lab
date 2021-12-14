@@ -8,7 +8,9 @@ class ActionResponse:
                 src = kwargs[kw]
                 self._props.update(src)
             else:
-                self._props[kw] = kwargs[kw]
+                val = kwargs[kw]
+                sval = val if (type(val) is str) else str(val)
+                self._props[kw] = sval
 
     def putPreview(self, preview: dict):
         self._props['preview'] = preview
@@ -37,8 +39,12 @@ class ActionResponse:
     def isTimeout(self) -> bool:
         return self.major() == 'Timeout'
 
-    def toDict(self) -> dict:
-        result = dict(self._props)
+    def toDict(self, excludePreview=True) -> dict:
+        result = dict()
+        for k in self._props:
+            if (k == 'preview') and excludePreview:
+                continue
+            result[k] = self._props[k]
         return result
 
     def __str__(self):

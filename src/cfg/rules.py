@@ -29,7 +29,7 @@ def codeFolder(configRuleName, action, accountName):
     return ruleTable.lookup(configRuleName, 'Folder')
 
 def isPreview(configRuleName, action, accountName):
-    return ruleTable.lookup(configRuleName, 'Preview', True)
+    return bool(ruleTable.lookup(configRuleName, 'Preview', True))
 
 def canRemediate(configRuleName, action, accountName):
     return ruleTable.lookup(configRuleName, 'CanRemediate', True)
@@ -65,4 +65,3 @@ def autoResourceTags(configRuleName, action, accountName):
 
 def conformancePackName():
     return "NZISM"
-

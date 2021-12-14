@@ -171,33 +171,41 @@ class ServiceUtils:
 
     def info(self, op, argType, argValue, msg, *args):
         sop = self.service_op(op)
+        noHead = (argType is None) or (argValue is None)
         argmap = _args_to_map(args)
-        logging.info("%s - %s: %s | Context: %s | Service: %s", msg, argType, argValue, argmap, sop)
+        if noHead:
+            logging.info("%s | Context: %s | Service: %s", msg, argmap, sop)
+        else:
+            logging.info("%s - %s: %s | Context: %s | Service: %s", msg, argType, argValue, argmap, sop)
         return msg
 
-    def warning(self, op, argType, argValue, msg, *args):
+    def warning(self, op, argType=None, argValue=None, msg="Unspecified", *args):
         sop = self.service_op(op)
+        noHead = (argType is None) or (argValue is None)
         argmap = _args_to_map(args)
-        ec = { argType: argValue }
+        ec = {}
+        if not noHead: ec[argType] = argValue
         if argmap: ec['Arguments'] = argmap
         logging.warning("%s | Service: %s | Context: %s ", msg, sop, ec)
         return msg
 
-    def fail(self, e, op, argType, argValue, *args):
+    def fail(self, e, op, argType=None, argValue=None, *args):
         sop = self.service_op(op)
+        noHead = (argType is None) or (argValue is None)
         argmap = _args_to_map(args)
-        ec = { argType: argValue }
+        ec = {}
+        if not noHead: ec[argType] = argValue
         if argmap: ec['Arguments'] = argmap
         ec['AccountId'] = self._profile.accountId,
         ec['SessionName'] = self._profile.sessionName
         logging.error("%s Client Error | Context: %s | Detail: %s", sop, ec, e)
-        if argValue:
-            erm = "{} Client Error for {}: `{}`".format(sop, argType, argValue)
-        else:
+        if noHead:
             erm = "{} Client Error".format(sop)
+        else:
+            erm = "{} Client Error for {}: `{}`".format(sop, argType, argValue)
         return erm
 
-    def integrity(self, msg, *args):
+    def integrity(self, msg="Unspecified", *args):
         svc = self._service
         argmap = _args_to_map(args)
         ec = {}
@@ -208,10 +216,12 @@ class ServiceUtils:
         erm = "{} Data Integrity Error: {}".format(svc, msg)
         return erm
 
-    def expired(self, op, argType, argValue, *args):
+    def expired(self, op, argType=None, argValue=None, *args):
         svc = self._service
+        noHead = (argType is None) or (argValue is None)
         argmap = _args_to_map(args)
-        ec = { argType: argValue }
+        ec = {}
+        if not noHead: ec[argType] = argValue
         if argmap: ec['Arguments'] = argmap
         ec['AccountId'] = self._profile.accountId,
         ec['SessionName'] = self._profile.sessionName

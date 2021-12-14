@@ -164,7 +164,7 @@ class RuleMain:
         out = "{}-{}".format(action, configRuleName)
         return out[0:64]
 
-    def _action_task(self, handlingMethod :Callable[[Profile, Task], rr.ActionResponse], task :Task):
+    def _action_task(self, handlingMethod :Callable[[Profile, Task], rr.ActionResponse], task :Task) -> rr.ActionResponse:
         try:
             action = task.action
             awsAccountId = task.accountId
@@ -201,21 +201,12 @@ class RuleMain:
             logging.error("RuleSoftwareError in %s handler. | Cause: %s | Task: %s", action, e.message, task)
             return rr.ActionFailureSoftware(action, e.message)
         except Exception as e:
-            erm = str(type(e))
-            logging.exception("General error in %s handler | Type: %s | Cause: %s | Task: %s", action, erm, e, task)
-            return rr.ActionFailure(action, e.message)
+            syn = "{} error in {} handler".format(type(e), action)
+            logging.exception("%s | Cause: %s | Task: %s", syn, e, task)
+            return rr.ActionFailure(action, syn)
 
-    def addRemediationHandler(self, configRuleName :str, resourceType :str, handlingMethod :Callable[[Profile, Task], rr.RemediationResponse]):
-        handler = self._create_handler(configRuleName, resourceType, handlingMethod)
-        self._remediationHandlers.append(handler)
-
-    def addBaselineHandler(self, configRuleName :str, resourceType :str, handlingMethod :Callable[[Profile, Task], rr.BaselineResponse]):
-        handler = self._create_handler(configRuleName, resourceType, handlingMethod)
-        self._baselineHandlers.append(handler)
-
-    def action(self, event):
+    def _action_event(self, event) -> rr.ActionResponse:
         action = 'setup'
-        actionResponse = rr.ActionFailure(action, "Init")
         try:
             action = self._required_action(event)
             configRuleName = _required_value(event, 'configRuleName')
@@ -246,15 +237,26 @@ class RuleMain:
                 'deploymentMethod': _defaulted_value(event, 'deploymentMethod', {})
             }
             task = Task(taskProps)
-            actionResponse = self._action_task(handlingMethod, task)
+            return self._action_task(handlingMethod, task)
         except RuleConfigurationError as e:
-            logging.error("RuleConfigurationError in task setup| Cause: %s | Event: %s", e.message, event)
-            actionResponse = rr.ActionFailureConfiguration(action, e.message)
+            logging.error("RuleConfigurationError in task setup | Cause: %s | Event: %s", e.message, event)
+            return rr.ActionFailureConfiguration(action, e.message)
         except RuleSoftwareError as e:
             logging.error("RuleSoftwareError in in task setup | Cause: %s | Event: %s", e.message, event)
-            actionResponse = rr.ActionFailureSoftware(action, e.message)
+            return rr.ActionFailureSoftware(action, e.message)
         except Exception as e:
-            erm = str(type(e))
-            logging.exception("General error in task setup | Type: %s | Cause: %s | Event: %s", erm, e, event)
-            actionResponse = rr.ActionFailure(action, erm)
+            syn = "{} error in {} handler".format(type(e), action)
+            logging.exception("%s | Cause: %s | Task: %s", syn, e, task)
+            return rr.ActionFailure(action, syn)
+
+    def addRemediationHandler(self, configRuleName :str, resourceType :str, handlingMethod :Callable[[Profile, Task], rr.RemediationResponse]):
+        handler = self._create_handler(configRuleName, resourceType, handlingMethod)
+        self._remediationHandlers.append(handler)
+
+    def addBaselineHandler(self, configRuleName :str, resourceType :str, handlingMethod :Callable[[Profile, Task], rr.BaselineResponse]):
+        handler = self._create_handler(configRuleName, resourceType, handlingMethod)
+        self._baselineHandlers.append(handler)
+
+    def action(self, event):
+        actionResponse = self._action_event(event)
         return actionResponse.toDict()

@@ -92,7 +92,15 @@ def allowDescribeIam(roleArn, sid="DescribeIam"):
         'Resource': roleArn
     }
 
-
+def allowDescribeAccount(masterAccountId, organizationId, sid="DescribeAccount"):
+    return {
+        'Sid': sid,
+        'Effect': "Allow",
+        'Action': [
+            "organizations:DescribeAccount"
+        ],
+        'Resource': "arn:aws:organizations::{}:account/{}/*".format(masterAccountId, organizationId)
+    }
 
 def allowCMKForServiceProducer(profile, storageServiceNamespace, producerServicePrincipal):
     sid = "Producer service " + producerServicePrincipal + " for " + storageServiceNamespace

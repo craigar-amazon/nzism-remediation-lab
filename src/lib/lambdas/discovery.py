@@ -3,7 +3,7 @@ import logging
 from lib.base import selectConfig
 from lib.rdq import Profile
 from lib.rdq.svciam import IamClient
-from lib.rdq.svcorg import OrganizationClient
+from lib.rdq.svcorg import OrganizationClient, AccountDescriptor, OrganizationDescriptor
 
 import cfg.roles as cfgroles
 
@@ -18,8 +18,11 @@ class LandingZoneDiscovery:
         self._iamClient = IamClient(profile)
         self._orgClient = OrganizationClient(profile)
 
-    def getAccountDescription(self, accountId):
-        return self._orgClient.getAccountDescription(accountId) 
+    def getAccountDescriptor(self, accountId) -> AccountDescriptor:
+        return self._orgClient.getAccountDescriptor(accountId) 
+
+    def getOrganizationDescriptor(self) -> OrganizationDescriptor:
+        return self._orgClient.getOrganizationDescriptor()
 
     def discoverLandingZone(self):
         lzsearch = cfgroles.landingZoneSearch()

@@ -2,8 +2,7 @@ import logging
 
 import lib.base.ruleresponse as rr
 
-def analyzeResponse(functionName, event, response):
-    target = event['target']
+def analyzeResponse(functionName, event :dict, response :dict):
     statusCode = response['StatusCode']
     payload = response['Payload']
     if statusCode != 200:
@@ -11,23 +10,23 @@ def analyzeResponse(functionName, event, response):
         logging.error("%s | Event: %s | Response: %s", msg, event, response)
         return "retry"
 
-    r = rr.ActionResponse(source=payload)
-    if r.isTimeout():
+    ar = rr.ActionResponse(source=payload)
+    if ar.isTimeout():
         head = "Function {} Timeout".format(functionName)
-        logging.error("%s | Action: %s | Reason: %s | Message: %s | Target: %s", head, r.action(), r.minor(), r.message(), target)
+        logging.error("%s | Response: %s | Event: %s", head, ar.toDict(), event)
         return "retry"
 
     isPreview = event['preview']
     if isPreview:
-        preview = response.preview()
+        preview = ar.preview()
         msg = "Function {} Preview".format(functionName)
         logging.warning("%s | Result: %s", msg, preview)
 
-    if r.isSuccess():
+    if ar.isSuccess():
         head = "Function {} Succeeded".format(functionName)
-        logging.info("%s | Action: %s | Result: %s | Message: %s | Target: %s", head, r.action(), r.minor(), r.message(), target)
+        logging.info("%s | Response: %s | Event: %s", head, ar.toDict(), event)
         return "done"
     
     head = "Function {} Failed".format(functionName)
-    logging.error("%s | Action: %s | Reason: %s | Message: %s | Target: %s", head, r.action(), r.minor(), r.message(), target)
+    logging.info("%s | Response: %s | Event: %s", head, ar.toDict(), event)
     return "failed"

@@ -113,14 +113,13 @@ class Parser:
                 'Name': keywordLocalAccount,
                 'Email': keywordLocalAccount
             }
-        targetDesc = self._discover.getAccountDescription(accountId)
-        targetStatus = targetDesc['Status']
-        if targetStatus != 'ACTIVE':
-            logging.info("Skipping account %s with status %s", accountId, targetStatus)
+        targetDesc = self._discover.getAccountDescriptor(accountId)
+        if not targetDesc.isActive:
+            logging.info("Skipping account %s with status %s", accountId, targetDesc.status)
             return None
         return {
-            'Name': targetDesc['Name'],
-            'Email': targetDesc['Email']
+            'Name': targetDesc.accountName,
+            'Email': targetDesc.accountEmail
         }
 
     def get_target_role(self, optLandingZone, accountId):

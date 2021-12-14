@@ -2,7 +2,7 @@ import unittest
 from lib.base import initLogging, Tags
 from lib.rdq import Profile
 from lib.rdq.svciam import IamClient
-from lib.rdq.svcorg import OrganizationClient
+from lib.rdq.svcorg import OrganizationClient, OrganizationDescriptor
 from lib.rdq.svclambda import LambdaClient
 from lib.rdq.svckms import KmsClient
 from lib.rdq.svcsqs import SQSClient
@@ -262,10 +262,12 @@ class TestRdq(unittest.TestCase):
         functionDescription = 'Compliance Dispatcher Lambda'
         functionCfg = cfgInstaller.coreFunctionCfg()
 
-        isLandingZoneDiscoveryEnabled = discovery.isLandingZoneDiscoveryEnabled()
         landingZoneDiscovery = LandingZoneDiscovery(profile)
-
         landingZoneConfig = landingZoneDiscovery.discoverLandingZone()
+        if landingZoneConfig:
+            orgDesc = landingZoneDiscovery.getOrganizationDescriptor()
+        else:
+            orgDesc = None
 
         ebc.declareEventBusArn(eventBusName, tagsCore)
         ruleArn = ebc.declareEventBusRuleArn(eventBusName, ruleName, ruleDescription, eventPattern, tagsCore)
@@ -275,9 +277,8 @@ class TestRdq(unittest.TestCase):
         sqsStatements = [ policy.allowSQSForServiceProducer(profile, queueName, policy.principalEventBridge(), ruleArn) ]
         sqsArn = sqsc.declareQueueArn(queueName, cmkarn, sqsStatements, sqsVisibilityTimeoutSecs, tagsCore)
         ebc.declareEventBusTarget(eventBusName, ruleName, queueName, sqsArn, ebTargetMaxAgeSecs)
-        if landingZoneConfig:
-            orgId = orgc.getOrganizationId()
-            ebc.declareEventBusPublishPermissionForOrganization(eventBusName, orgId)
+        if orgDesc:
+            ebc.declareEventBusPublishPermissionForOrganization(eventBusName, orgDesc.id)
         else:
             ebc.declareEventBusPublishPermissionForAccount(eventBusName, profile.accountId)
         lambdaPolicyArn = iamc.declareAwsPolicyArn(policy.awsLambdaBasicExecution())
@@ -288,8 +289,9 @@ class TestRdq(unittest.TestCase):
         remediationLambdaArn = profile.getRegionAccountArn('lambda', remediationLambdaNamePattern)
         policyMapInvoke = policy.permissions([policy.allowInvokeLambda(remediationLambdaArn)])
         inlinePolicyMap = {"ConsumeQueue": policyMapSQS, "InvokeRemediations": policyMapInvoke}
-        if isLandingZoneDiscoveryEnabled:
-            inlinePolicyMap['DiscoverRoles'] = policy.permissions([policy.allowDescribeIam("*")])
+        if orgDesc:
+            lzStatements = [policy.allowDescribeIam("*"), policy.allowDescribeAccount(orgDesc.masterAccountId, orgDesc.id)]
+            inlinePolicyMap['LandingZone'] = policy.permissions(lzStatements)
         iamc.declareInlinePoliciesForRole(lambdaRoleName, inlinePolicyMap)
         lambdaArn = lambdac.declareFunctionArn(functionName, functionDescription, roleArn, functionCfg, codeZip, tagsCore)
         lambdac.declareEventSourceMappingUUID(functionName, sqsArn, sqsPollCfg)

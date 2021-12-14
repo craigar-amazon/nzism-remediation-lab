@@ -42,12 +42,14 @@ def remediate(profile :Profile, task :Task):
     logGroupName = task.resourceId
     cmkArn = declareCMKArn(profile, task)
     cwlclient = CwlClient(profile)
-    logGroup = cwlclient.getLogGroupDescriptor(logGroupName)
-    if logGroup.kmsArn:
-        return response.RemediationValidated("CMK {} already associated".format(logGroup.kmsArn))
-    isManual = logGroup.tags.isEnabled(task.manualTagName)
+    optLogGroup = cwlclient.getLogGroupDescriptor(logGroupName)
+    if not optLogGroup:
+        return response.RemediationValidated("Log group {} no longer exists".format(logGroupName))
+    if optLogGroup.kmsArn:
+        return response.RemediationValidated("CMK {} is already associated with log group".format(optLogGroup.kmsArn))
+    isManual = optLogGroup.tags.isEnabled(task.manualTagName)
     if isManual:
         return response.RemediationExemptManual()
     cwlclient.associateKmsKeyWithLogGroup(logGroupName, cmkArn)
     cwlclient.putTags(logGroupName, task.autoResourceTags)
-    return response.RemediationApplied("CMK {} associated with log group".format(cmkArn))
+    return response.RemediationApplied("CMK {} is now associated with log group".format(cmkArn))

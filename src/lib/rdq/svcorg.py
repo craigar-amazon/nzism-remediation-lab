@@ -1,6 +1,68 @@
+import json
 import botocore
 from lib.rdq import RdqError
 from lib.rdq.base import ServiceUtils
+
+class AccountDescriptor:
+    def __init__(self, props):
+        self._props = props
+
+    @property
+    def accountId(self):
+        return self._props['Id']
+
+    @property
+    def arn(self):
+        return self._props['Arn']
+
+    @property
+    def accountName(self):
+        return self._props['Name']
+
+    @property
+    def accountEmail(self):
+        return self._props['Email']
+
+    @property
+    def status(self):
+        return self._props['Status']
+
+    @property
+    def isActive(self):
+        return self._props['Status'] == 'ACTIVE'
+
+    def toDict(self) -> dict:
+        return self._props
+
+    def __str__(self):
+        return json.dumps(self._props)
+
+
+class OrganizationDescriptor:
+    def __init__(self, props):
+        self._props = props
+
+    @property
+    def id(self):
+        return self._props['Id']
+
+    @property
+    def arn(self):
+        return self._props['Arn']
+
+    @property
+    def masterAccountId(self):
+        return self._props['MasterAccountId']
+
+    @property
+    def masterAccountEmail(self):
+        return self._props['MasterAccountEmail']
+
+    def toDict(self) -> dict:
+        return self._props
+
+    def __str__(self):
+        return json.dumps(self._props)
 
 
 class OrganizationClient:
@@ -36,9 +98,8 @@ class OrganizationClient:
             self.diagnosticDelegated(op)
             raise RdqError(self._utils.fail(e, op))
 
-    def getOrganizationId(self):
-        org = self.describe_organization()
-        return org['Id']
+    def getOrganizationDescriptor(self) -> OrganizationDescriptor:
+        return OrganizationDescriptor(self.describe_organization())
 
-    def getAccountDescription(self, accountId):
-        return self.describe_account(accountId)
+    def getAccountDescriptor(self, accountId) -> AccountDescriptor:
+        return AccountDescriptor(self.describe_account(accountId))
