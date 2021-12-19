@@ -30,7 +30,8 @@ def manualTagName():
 def autoResourceTags():
     return {
         'AutoDeployed': 'True',
-        'AutoDeploymentReason': 'NZISM Conformance'
+        'AutoDeploymentReason': 'NZISM Conformance',
+        'NZISM': 'CID:3548+CID:3562+CID:4838',
     }
 
 def stackNamePattern():

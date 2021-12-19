@@ -60,6 +60,14 @@ def coreQueueCfg():
 def coreCloudWatchNamespace(action):
     return "NZISM-{}".format(action)
 
+def coreCloudWatchDimensionList(action):
+    return [
+        'ConfigRule/Account/Region',
+        'ConfigRule',
+        'Account',
+        'AutoResourceTag.NZISM/Account'
+    ]
+
 def ruleResourceTags():
     return {
         'Application': 'NZISM Auto Remediation',

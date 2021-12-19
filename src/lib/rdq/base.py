@@ -169,14 +169,15 @@ class ServiceUtils:
         if tagsDelta.isEmpty(): return True
         return self._profile.applyTagsToArn(arn, tagsDelta)
 
-    def info(self, op, argType, argValue, msg, *args):
+    def info(self, op, argType=None, argValue=None, msg="Unspecified", *args):
         sop = self.service_op(op)
         noHead = (argType is None) or (argValue is None)
         argmap = _args_to_map(args)
-        if noHead:
-            logging.info("%s | Context: %s | Service: %s", msg, argmap, sop)
-        else:
-            logging.info("%s - %s: %s | Context: %s | Service: %s", msg, argType, argValue, argmap, sop)
+        ec = {}
+        if not noHead: ec[argType] = argValue
+        if argmap: ec['Arguments'] = argmap
+        report = {'Message': msg, 'Service': sop, 'Context': ec}
+        logging.info(report)
         return msg
 
     def warning(self, op, argType=None, argValue=None, msg="Unspecified", *args):
@@ -186,7 +187,8 @@ class ServiceUtils:
         ec = {}
         if not noHead: ec[argType] = argValue
         if argmap: ec['Arguments'] = argmap
-        logging.warning("%s | Service: %s | Context: %s ", msg, sop, ec)
+        report = {'Message': msg, 'Service': sop, 'Context': ec}
+        logging.warning(report)
         return msg
 
     def fail(self, e, op, argType=None, argValue=None, *args):
@@ -196,25 +198,27 @@ class ServiceUtils:
         ec = {}
         if not noHead: ec[argType] = argValue
         if argmap: ec['Arguments'] = argmap
-        ec['AccountId'] = self._profile.accountId,
+        ec['AccountId'] = self._profile.accountId
         ec['SessionName'] = self._profile.sessionName
-        logging.error("%s Client Error | Context: %s | Detail: %s", sop, ec, e)
         if noHead:
-            erm = "{} Client Error".format(sop)
+            syn = "{} client error".format(sop)
         else:
-            erm = "{} Client Error for {}: `{}`".format(sop, argType, argValue)
-        return erm
+            syn = "{} client error for {}: `{}`".format(sop, argType, argValue)
+        report = {'Synopsis': syn, 'Context': ec, 'Detail': e}
+        logging.error(report)
+        return syn
 
     def integrity(self, msg="Unspecified", *args):
         svc = self._service
         argmap = _args_to_map(args)
         ec = {}
         if argmap: ec['Arguments'] = argmap
-        ec['AccountId'] = self._profile.accountId,
+        ec['AccountId'] = self._profile.accountId
         ec['SessionName'] = self._profile.sessionName
-        logging.error("%s Data Integrity Error | Cause: %s | Context: %s", svc, msg, ec)
-        erm = "{} Data Integrity Error: {}".format(svc, msg)
-        return erm
+        syn = "{} data integrity error: {}".format(svc, msg)
+        report = {'Synopsis': syn, 'Context': ec}
+        logging.error(report)
+        return syn
 
     def expired(self, op, argType=None, argValue=None, *args):
         svc = self._service
@@ -223,11 +227,12 @@ class ServiceUtils:
         ec = {}
         if not noHead: ec[argType] = argValue
         if argmap: ec['Arguments'] = argmap
-        ec['AccountId'] = self._profile.accountId,
+        ec['AccountId'] = self._profile.accountId
         ec['SessionName'] = self._profile.sessionName
-        logging.error("%s Expired | Service: %s | Context: %s", op, svc, ec)
-        erm = "{} Expired".format(op)
-        return erm
+        syn = "{} expired".format(op)
+        report = {'Synopsis': syn, 'Service': svc, 'Context': ec}
+        logging.error(report)
+        return syn
 
     def preview(self, op, args):
         sop = self.service_op(op)

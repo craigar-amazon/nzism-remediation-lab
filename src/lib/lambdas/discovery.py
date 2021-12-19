@@ -36,8 +36,8 @@ class LandingZoneDiscovery:
         lzcfg = selectConfig(lzroles, "landingZoneRoles", lz)
         auditRoleName = selectConfig(lzcfg, lz, 'Audit')
         remediationRoleName = selectConfig(lzcfg, lz, 'Remediation')
-        auditRoleArn = self._profile.getRoleArn(auditRoleName)
-        logging.info("Preferred audit role - %s", auditRoleArn)
+        preferredAuditRoleArn = self._profile.getRoleArn(auditRoleName)
+        discoveredAuditRoleArn = None
         if searchLength > 1:
             for lz in lzsearch:
                 lzcfg = selectConfig(lzroles, "landingZoneRoles", lz)
@@ -45,9 +45,17 @@ class LandingZoneDiscovery:
                 remediationRoleName = selectConfig(lzcfg, lz, 'Remediation')
                 exAuditRole = self._iamClient.getRole(auditRoleName)
                 if exAuditRole:
-                    auditRoleArn = exAuditRole['Arn']
-                    logging.info("Discovered audit role- %s", auditRoleArn)
+                    discoveredAuditRoleArn = exAuditRole['Arn']
                     break
+        if discoveredAuditRoleArn:
+            auditRoleArn = discoveredAuditRoleArn
+            if auditRoleArn == preferredAuditRoleArn:
+                logging.info("Discovered preferred audit role %s", auditRoleArn)
+            else:
+                logging.warning("Discovered audit role %s - but preferred %s", auditRoleArn, preferredAuditRoleArn)
+        else:
+            auditRoleArn = preferredAuditRoleArn
+            logging.info("Using preferred audit role %s (unverified)", auditRoleArn)
         return {
             'LandingZone': lz,
             'AuditRoleName': auditRoleName,

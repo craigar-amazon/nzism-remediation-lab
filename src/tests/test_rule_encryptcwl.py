@@ -40,8 +40,8 @@ class TestRule(unittest.TestCase):
 
     def test_direct(self):
         util.show_reminder_dispatchingAudit()
-        resourceId = '/aws/lambda/UnitTest1Lambda'
-        deploymentMethod = {'CreateStack': True, 'StackMaxSecs': 300}
+        resourceId = 'appdemo4'
+        deploymentMethod = {'CreateStack': False, 'StackMaxSecs': 300}
         try:
             response = util.run_direct(_isPreview, _configRuleName, _resourceType, resourceId, _action, deploymentMethod, _setupHandler, lambda_handler)
             print(response)
@@ -63,5 +63,5 @@ class TestRule(unittest.TestCase):
 if __name__ == '__main__':
     initLogging(None, 'INFO')
     loader = unittest.TestLoader()
-    loader.testMethodPrefix = "test_invoke"
+    loader.testMethodPrefix = "test_direct"
     unittest.main(warnings='default', testLoader = loader)

@@ -1,14 +1,37 @@
 import logging
 import json
+from typing import List
 
 import cfg.core as cfgCore
 import cfg.rules as cfgrules
 
 from lib.rdq import Profile
 from lib.base import ConfigError
+from lib.base.request import DispatchEvent, DispatchEventTarget
 from lib.lambdas.discovery import LandingZoneDiscovery
 
 keywordLocalAccount = 'LOCAL'
+
+class RuleInvocation:
+    def __init__(self, functionName :str, event :DispatchEvent):
+        self._functionName = functionName
+        self._event = event
+
+    @property
+    def functionName(self) -> str: return self._functionName
+
+    @property
+    def event(self) -> DispatchEvent: return self._event
+
+    def toDict(self):
+        d = dict()
+        d['functionName'] = self._functionName
+        d['event'] = self._event.toDict()
+        return d
+
+    def __str__(self):
+        return json.dumps(self.toDict())
+
 
 def has_expected_attribute(src, id, aname, expected):
     if not (aname in src):
@@ -181,32 +204,33 @@ class Parser:
             logging.info("No %s implementation defined for rule %s and account %s", action, configRuleName, targetAccountName)
             return None
         functionName = cfgCore.ruleFunctionName(ruleCodeFolder)
-        target = {}
-        target['awsAccountId'] = targetAccountId
-        target['awsAccountName'] = targetAccountName
-        target['awsAccountEmail'] = targetAccountEmail
-        target['awsRegion'] = dispatch['awsRegion']
-        target['roleName'] = targetRole
-        target['resourceType'] = dispatch['resourceType']
-        target['resourceId'] = dispatch['resourceId']
-        event = {}
-        event['configRuleName'] = configRuleName
-        event['action'] = action
-        event['conformancePackName'] = cfgrules.conformancePackName()
-        event['preview'] = self.get_preview(configRuleName, action, targetAccountName)
-        event['deploymentMethod'] = self.get_deployment_method(configRuleName, action, targetAccountName)
-        event['manualTagName'] = self.get_manual_tag_name(configRuleName, action, targetAccountName)
-        event['autoResourceTags'] = self.get_auto_resource_tags(configRuleName, action, targetAccountName)
-        event['stackNamePattern'] = self.get_stack_name_pattern(configRuleName, action, targetAccountName)
-        event['target'] = target
+        det = {}
+        det['awsAccountId'] = targetAccountId
+        det['awsAccountName'] = targetAccountName
+        det['awsAccountEmail'] = targetAccountEmail
+        det['awsRegion'] = dispatch['awsRegion']
+        det['roleName'] = targetRole
+        det['resourceType'] = dispatch['resourceType']
+        det['resourceId'] = dispatch['resourceId']
+        target = DispatchEventTarget(det)
+        de = {}
+        de['configRuleName'] = configRuleName
+        de['action'] = action
+        de['conformancePackName'] = cfgrules.conformancePackName()
+        de['preview'] = self.get_preview(configRuleName, action, targetAccountName)
+        de['deploymentMethod'] = self.get_deployment_method(configRuleName, action, targetAccountName)
+        de['manualTagName'] = self.get_manual_tag_name(configRuleName, action, targetAccountName)
+        de['autoResourceTags'] = self.get_auto_resource_tags(configRuleName, action, targetAccountName)
+        de['stackNamePattern'] = self.get_stack_name_pattern(configRuleName, action, targetAccountName)
+        event = DispatchEvent(de, target)
         return {'functionName': functionName, 'event': event}
 
-    def createInvokeList(self, dispatchList):
+    def createInvokeList(self, dispatchList) -> List[RuleInvocation]:
         optLandingZone = self._discover.discoverLandingZone()
         invokeList = []
         for dispatch in dispatchList:
             optInvoke = self.create_invoke(optLandingZone, dispatch)
             if not optInvoke: continue
-            invoke = {'functionName': optInvoke['functionName'], 'event': optInvoke['event']}
+            invoke = RuleInvocation(optInvoke['functionName'], optInvoke['event'])
             invokeList.append(invoke)
         return invokeList

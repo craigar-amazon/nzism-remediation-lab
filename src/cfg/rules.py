@@ -16,7 +16,7 @@ ruleTable.put('s3-account-level-public-access-blocks-periodic', {
 ruleTable.put('cloudwatch-log-group-encrypted', {
     'Folder': 'EncryptCWL',
     'CanBaseline': True,
-    'NZISM': 'CID:3548,CID:3562,CID:4838',
+    'NZISM': 'CID:3548+CID:3562+CID:4838',
     'Preview': False,
     'ExcludedResourceIds': '.*aws-controltower.*',
     'Deploy': {
@@ -24,6 +24,24 @@ ruleTable.put('cloudwatch-log-group-encrypted', {
         'StackMaxSecs': base.stackMaxSecs
     }
 })
+
+def conformancePackName(): return "NZISM"
+
+def stackNamePattern(configRuleName, action, accountName):
+    return "NZISM-AutoDeployed-{}"
+
+def manualRemediationTagName(configRuleName, action, accountName):
+    return 'ManualRemediation'
+
+def autoResourceTags(configRuleName, action, accountName):
+    cpName = conformancePackName()
+    tags = {
+        'AutoDeployed': 'True',
+        'AutoDeploymentReason': '{} Conformance'.format(cpName)
+    }
+    cpTag = ruleTable.lookup(configRuleName, cpName, None, action, accountName)
+    if cpTag: tags[cpName] = cpTag
+    return tags
 
 def codeFolder(configRuleName, action, accountName):
     return ruleTable.lookup(configRuleName, 'Folder')
@@ -46,22 +64,3 @@ def includedResourceIds(configRuleName, action, accountName):
 def excludedResourceIds(configRuleName, action, accountName):
     return ruleTable.lookup(configRuleName, 'ExcludedResourceIds')
 
-def stackNamePattern(configRuleName, action, accountName):
-    return "NZISM-AutoDeployed-{}"
-
-def manualRemediationTagName(configRuleName, action, accountName):
-    return 'ManualRemediation'
-
-def autoResourceTags(configRuleName, action, accountName):
-    tags = {
-        'AutoDeployed': 'True',
-        'AutoDeploymentReason': 'NZISM Conformance'
-    }
-    cpName = conformancePackName()
-    cpTag = ruleTable.lookup(configRuleName, cpName, None, action, accountName)
-    if cpTag:
-        tags[cpName] = cpTag
-    return tags
-
-def conformancePackName():
-    return "NZISM"

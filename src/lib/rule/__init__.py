@@ -117,8 +117,11 @@ class Task:
     def elapsedSecs(self):
         return time.time() - self._startedAt
 
+    def toDict(self):
+        return dict(self._props)
+
     def __str__(self):
-        return json.dumps(self._props)
+        return json.dumps(self.toDict())
     
 
 class RuleMain:
@@ -186,23 +189,30 @@ class RuleMain:
                 actionResponse.putPreview(previewResponse)
             return actionResponse
         except RuleTimeoutError as e:
-            logging.warning("Timeout in %s handler. | Cause: %s | Task: %s", action, e.message, task)
+            report = {'Synopsis': "RuleTimeout", 'Context': "Task Handler", 'Cause': e.message, 'Task': task.toDict()}
+            logging.warning(report)
             return rr.ActionTimeoutConfiguration(action, e.message)
         except RdqTimeout as e:
-            logging.warning("RdqTimeout in %s handler. | Cause: %s | Task: %s", action, e.message, task)
+            report = {'Synopsis': "RdqTimeout", 'Context': "Task Handler", 'Cause': e.message, 'Task': task.toDict()}
+            logging.warning(report)
             return rr.ActionTimeoutRdq(action, e.message)
         except RdqError as e:
-            logging.error("RdqError in %s handler. | Cause: %s | Task: %s", action, e.message, task)
+            report = {'Synopsis': "RdqError", 'Context': "Task Handler", 'Cause': e.message, 'Task': task.toDict()}
+            logging.error(report)
             return rr.ActionFailureRdq(action, e.message)
         except RuleConfigurationError as e:
-            logging.error("RuleConfigurationError in %s handler. | Cause: %s | Task: %s", action, e.message, task)
+            report = {'Synopsis': "RuleConfigurationError", 'Context': "Task Handler", 'Cause': e.message, 'Task': task.toDict()}
+            logging.error(report)
             return rr.ActionFailureConfiguration(action, e.message)
         except RuleSoftwareError as e:
-            logging.error("RuleSoftwareError in %s handler. | Cause: %s | Task: %s", action, e.message, task)
+            report = {'Synopsis': "RuleSoftwareError", 'Context': "Task Handler", 'Cause': e.message, 'Task': task.toDict()}
+            logging.error(report)
             return rr.ActionFailureSoftware(action, e.message)
         except Exception as e:
-            syn = "{} error in {} handler".format(type(e), action)
-            logging.exception("%s | Cause: %s | Task: %s", syn, e, task)
+            syn = str(type(e))
+            msg = str(e)
+            report = {'Synopsis': syn, 'Context': "Task Handler", 'Cause': msg, 'Task': task.toDict()}
+            logging.exception(report)
             return rr.ActionFailure(action, syn)
 
     def _action_event(self, event) -> rr.ActionResponse:
@@ -239,14 +249,18 @@ class RuleMain:
             task = Task(taskProps)
             return self._action_task(handlingMethod, task)
         except RuleConfigurationError as e:
-            logging.error("RuleConfigurationError in task setup | Cause: %s | Event: %s", e.message, event)
+            report = {'Synopsis': "RuleConfigurationError", 'Context': "Task Setup", 'Cause': e.message, 'Event': event}
+            logging.error(report)
             return rr.ActionFailureConfiguration(action, e.message)
         except RuleSoftwareError as e:
-            logging.error("RuleSoftwareError in in task setup | Cause: %s | Event: %s", e.message, event)
+            report = {'Synopsis': "RuleSoftwareError", 'Context': "Task Setup", 'Cause': e.message, 'Event': event}
+            logging.error(report)
             return rr.ActionFailureSoftware(action, e.message)
         except Exception as e:
-            syn = "{} error in {} handler".format(type(e), action)
-            logging.exception("%s | Cause: %s | Task: %s", syn, e, task)
+            syn = str(type(e))
+            msg = str(e)
+            report = {'Synopsis': syn, 'Context': "Task Setup", 'Cause': msg, 'Event': event}
+            logging.exception(report)
             return rr.ActionFailure(action, syn)
 
     def addRemediationHandler(self, configRuleName :str, resourceType :str, handlingMethod :Callable[[Profile, Task], rr.RemediationResponse]):
