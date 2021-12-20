@@ -73,9 +73,12 @@ def _create_generator_from_tag(dimName, event :DispatchEvent):
 def _create_generator(dimName :str, event :DispatchEvent) -> _Generator:
     cdimName = dimName.lower()
     if cdimName == 'configrule': return _Generator('ConfigRule', event.configRuleName)
-    if cdimName == 'account': return _Generator('Account', [event.target.accountName])
+    if cdimName == 'accountid': return _Generator('AccountId', [event.target.accountId])
+    if cdimName == 'accountname': return _Generator('AccountName', [event.target.accountName])
+    if cdimName == 'accountemail': return _Generator('AccountEmail', [event.target.accountEmail])
     if cdimName == 'region': return _Generator('Region', [event.target.regionName])
     if cdimName == 'resourcetype': return _Generator('ResourceType', [event.target.resourceType])
+    if cdimName.startswith('account'): return _Generator('AccountName', [event.target.accountName])
     if cdimName.startswith('autoresourcetag.'): return _create_generator_from_tag(dimName, event)
     logging.warning("CloudWatch dimension `%s` is not supported", dimName)
     return _create_default_generator(dimName)

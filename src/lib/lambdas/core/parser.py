@@ -9,121 +9,37 @@ from lib.rdq import Profile
 from lib.base import ConfigError
 from lib.base.request import DispatchEvent, DispatchEventTarget
 from lib.lambdas.discovery import LandingZoneDiscovery
+import lib.lambdas.core.filter as filter
 
 keywordLocalAccount = 'LOCAL'
 
 class RuleInvocation:
-    def __init__(self, functionName :str, event :DispatchEvent):
+    def __init__(self, functionName :str, event :DispatchEvent, attempt=1):
         self._functionName = functionName
         self._event = event
+        self._attempt = attempt
 
     @property
     def functionName(self) -> str: return self._functionName
 
     @property
+    def attempt(self) -> int: return self._attempt
+
+    @property
     def event(self) -> DispatchEvent: return self._event
+
+    def newInvocation(self):
+        return RuleInvocation(self._functionName, self._event, self._attempt + 1)
 
     def toDict(self):
         d = dict()
         d['functionName'] = self._functionName
+        d['attempt'] = self._attempt
         d['event'] = self._event.toDict()
         return d
 
     def __str__(self):
         return json.dumps(self.toDict())
-
-
-def has_expected_attribute(src, id, aname, expected):
-    if not (aname in src):
-        msg = "Attribute '{}' is missing from record '{}'".format(aname, id)
-        logging.warning(msg)
-        return False
-    actual = src[aname]
-    if actual != expected:
-        msg = "Attribute '{}' has value '{}'. Expected '{}'. Record Id '{}'".format(aname, actual, expected, id)
-        logging.warning(msg)
-        return False
-    return True
-
-def get_attribute(src, context, aname):
-    if not (aname in src):
-        msg = "Attribute '{}' is missing from '{}'".format(aname, context)
-        logging.warning(msg)
-        return None
-    return src[aname]
-
-
-def get_base_config_rule_name(id, qval):
-    spos = qval.find("-conformance-pack-")
-    if spos <= 0:
-        msg = "Qualified config rule name '{}' in record '{}' is not in expected format".format(qval, id)
-        logging.warning(msg)
-        return None
-    return qval[0:spos]
-
-def extract_dispatch(messageId, body):
-    if not has_expected_attribute(body, messageId, 'detail-type', "Config Rules Compliance Change"): return None
-    if not has_expected_attribute(body, messageId, 'source', "aws.config"): return None
-
-    detail = get_attribute(body, messageId, 'detail')
-    if not detail: return None
-    resourceId = get_attribute(detail, messageId, "resourceId")
-    if not resourceId: return None
-    resourceType = get_attribute(detail, messageId, "resourceType")
-    if not resourceType: return None
-    awsAccountId = get_attribute(detail, messageId, "awsAccountId")
-    if not awsAccountId: return None
-    awsRegion = get_attribute(detail, messageId, "awsRegion")
-    if not awsRegion: return None
-    configRuleNameQualified = get_attribute(detail, messageId, "configRuleName")
-    if not configRuleNameQualified: return None
-    if not has_expected_attribute(detail, messageId, 'messageType', "ComplianceChangeNotification"): return None
-    newEvaluationResult = get_attribute(detail, messageId, "newEvaluationResult")
-    if not newEvaluationResult: return None
-    complianceType = get_attribute(newEvaluationResult, messageId, "complianceType")
-    if not complianceType: return None
-    configRuleNameBase = get_base_config_rule_name(messageId, configRuleNameQualified)
-    if not configRuleNameBase: return None
-    return {
-        'messageId': messageId,
-        'complianceType': complianceType,
-        'configRuleNameQualified': configRuleNameQualified,
-        'configRuleNameBase': configRuleNameBase,
-        'awsAccountId': awsAccountId,
-        'awsRegion': awsRegion,
-        'resourceType': resourceType,
-        'resourceId': resourceId
-    }
-
-def create_dispatch(record):
-    if not ("messageId" in record):
-        logging.warning("Record is missing messageId. Skipping")
-        return None
-    messageId = record["messageId"]
-    bodyjson = get_attribute(record, messageId, 'body')
-    if not bodyjson: return None
-    body = json.loads(bodyjson)
-    dispatch = extract_dispatch(messageId, body)
-    if not dispatch: return None
-
-    logging.info("Received Compliance Event: %s", dispatch)
-    complianceType = dispatch['complianceType']
-    if complianceType == 'NON_COMPLIANT':
-        dispatch['action'] = 'remediate'
-        return dispatch
-    return None
-
-
-def createDispatchList(event):
-    dispatchList = []
-    records = get_attribute(event, "event", 'Records')
-    if records:
-        for record in records:
-            dispatch = create_dispatch(record)
-            if dispatch:
-                dispatchList.append(dispatch)
-    return dispatchList
-
 
 class Parser:
     def __init__(self, profile :Profile):
@@ -193,6 +109,7 @@ class Parser:
     def create_invoke(self, optLandingZone, dispatch):
         action = dispatch['action']
         targetAccountId = dispatch['awsAccountId']
+        resourceId = dispatch['resourceId']
         optTargetDesc = self.get_account_desc(optLandingZone, targetAccountId)
         if not optTargetDesc: return None
         targetRole = self.get_target_role(optLandingZone, targetAccountId)
@@ -201,9 +118,16 @@ class Parser:
         configRuleName = dispatch['configRuleNameBase']
         ruleCodeFolder = cfgrules.codeFolder(configRuleName, action, targetAccountName)
         if not ruleCodeFolder:
-            logging.info("No %s implementation defined for rule %s and account %s", action, configRuleName, targetAccountName)
+            report = {'Synopsis': "NoRuleImplementation", 'Dispatch': dispatch, 'AccountName': targetAccountName}
+            logging.info(report)
             return None
         functionName = cfgCore.ruleFunctionName(ruleCodeFolder)
+        acceptResource = filter.acceptResourceId(configRuleName, action, targetAccountName, resourceId)
+        if not acceptResource:
+            report = {'Synopsis': "ResourceExempt", 'Dispatch': dispatch, 'AccountName': targetAccountName}
+            logging.info(report)
+            return None
+
         det = {}
         det['awsAccountId'] = targetAccountId
         det['awsAccountName'] = targetAccountName
@@ -211,7 +135,7 @@ class Parser:
         det['awsRegion'] = dispatch['awsRegion']
         det['roleName'] = targetRole
         det['resourceType'] = dispatch['resourceType']
-        det['resourceId'] = dispatch['resourceId']
+        det['resourceId'] = resourceId
         target = DispatchEventTarget(det)
         de = {}
         de['configRuleName'] = configRuleName
