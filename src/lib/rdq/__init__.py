@@ -29,6 +29,8 @@ class RdqTimeout(Exception):
     def message(self):
         return self._message
 
+class RdqCredentialsWarning(RdqError): pass
+
 
 class Profile:
     def __init__(self, srcSession=None, roleName=None, sessionName=None, regionName=None):
@@ -53,13 +55,14 @@ class Profile:
             self._isPreviewing = False
             self._previewLog = []
         except botocore.exceptions.NoCredentialsError as e:
-            raise RdqError("Unable to locate credentials")
+            raise RdqCredentialsWarning("Unable to locate credentials")
         except botocore.exceptions.ClientError as e:
-            erc = e.response['Error']['Code'] 
+            erc = e.response['Error']['Code']
             if erc == 'ExpiredToken':
-                raise RdqError("Your credentials have expired")
-            logging.error("botocore ClientError | Cause: %s | Api: %s | Detail %s", erc, op, e)
-            raise RdqError("Your credentials are invalid")
+                raise RdqCredentialsWarning("Your credentials have expired")
+            report = {'Synopsis': "botocore ClientError", 'Cause': erc, 'Api': op, 'Detail': str(e)}
+            logging.error(report)
+            raise RdqCredentialsWarning("Your credentials are invalid")
     
     @property
     def accountId(self):

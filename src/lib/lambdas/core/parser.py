@@ -8,10 +8,29 @@ import cfg.rules as cfgrules
 from lib.rdq import Profile
 from lib.base import ConfigError
 from lib.base.request import DispatchEvent, DispatchEventTarget
-from lib.lambdas.discovery import LandingZoneDiscovery
+from lib.lambdas.discovery import LandingZoneDiscovery, LandingZoneDescriptor
 import lib.lambdas.core.filter as filter
 
 keywordLocalAccount = 'LOCAL'
+
+class TargetDescriptor:
+    def __init__(self, props :dict={}):
+        self._props = props
+    
+    @property
+    def isLocal(self): return len(self._props) == 0
+
+    @property
+    def accountName(self): return self._props.get('AccountName', 'LOCAL')
+
+    @property
+    def accountEmail(self): return self._props.get('AccountEmail', 'LOCAL')
+
+    @property
+    def roleName(self): return self._props.get('RoleName', 'LOCAL')
+
+    def toDict(self): return self._props
+        
 
 class RuleInvocation:
     def __init__(self, functionName :str, event :DispatchEvent, attempt=1):
@@ -46,33 +65,23 @@ class Parser:
         self._profile = profile
         self._discover = LandingZoneDiscovery(profile)
 
-    def get_account_desc(self, optLandingZone, accountId):
-        if not optLandingZone:
-            return {
-                'Name': keywordLocalAccount,
-                'Email': keywordLocalAccount
-            }
+    def get_target(self, landingZoneDescriptor :LandingZoneDescriptor, accountId) -> TargetDescriptor:
+        if landingZoneDescriptor.isStandalone:
+            if self._profile.accountId == accountId: return TargetDescriptor()
+            logging.info("Skipping external account %s (Standalone Mode)", accountId)
+            return None
+        
         targetDesc = self._discover.getAccountDescriptor(accountId)
         if not targetDesc.isActive:
             logging.info("Skipping account %s with status %s", accountId, targetDesc.status)
             return None
-        return {
-            'Name': targetDesc.accountName,
-            'Email': targetDesc.accountEmail
-        }
 
-    def get_target_role(self, optLandingZone, accountId):
-        targetRole = None
-        if optLandingZone:
-            targetRole = optLandingZone['RemediationRoleName']
-        else:
-            if self._profile.accountId == accountId:
-                targetRole = keywordLocalAccount
-        if not targetRole:
-            erm = "Cannot remediate account {} without a remediation role".format(accountId)
-            logging.error(erm)
-            raise ConfigError(erm)
-        return targetRole
+        props = {
+            'RoleName': landingZoneDescriptor.remediationRoleName,
+            'AccountName': targetDesc.accountName,
+            'AccountEmail': targetDesc.accountEmail
+        }
+        return TargetDescriptor(props)
 
     def get_preview(self, configRuleName, action, accountName):
         preview = cfgrules.isPreview(configRuleName, action, accountName)
@@ -106,34 +115,32 @@ class Parser:
         return tags
 
 
-    def create_invoke(self, optLandingZone, dispatch):
+    def create_invoke(self, landingZoneDescriptor :LandingZoneDescriptor, dispatch):
         action = dispatch['action']
         targetAccountId = dispatch['awsAccountId']
         resourceId = dispatch['resourceId']
-        optTargetDesc = self.get_account_desc(optLandingZone, targetAccountId)
-        if not optTargetDesc: return None
-        targetRole = self.get_target_role(optLandingZone, targetAccountId)
-        targetAccountName = optTargetDesc['Name']
-        targetAccountEmail = optTargetDesc['Email']
+        optTargetDescriptor = self.get_target(landingZoneDescriptor, targetAccountId)
+        if not optTargetDescriptor: return None
+        targetAccountName = optTargetDescriptor.accountName
         configRuleName = dispatch['configRuleNameBase']
         ruleCodeFolder = cfgrules.codeFolder(configRuleName, action, targetAccountName)
         if not ruleCodeFolder:
-            report = {'Synopsis': "NoRuleImplementation", 'Dispatch': dispatch, 'AccountName': targetAccountName}
+            report = {'Synopsis': "NoRuleImplementation", 'Dispatch': dispatch, 'Target': optTargetDescriptor.toDict()}
             logging.info(report)
             return None
         functionName = cfgCore.ruleFunctionName(ruleCodeFolder)
         acceptResource = filter.acceptResourceId(configRuleName, action, targetAccountName, resourceId)
         if not acceptResource:
-            report = {'Synopsis': "ResourceExempt", 'Dispatch': dispatch, 'AccountName': targetAccountName}
+            report = {'Synopsis': "ResourceExempt", 'Dispatch': dispatch, 'Target': optTargetDescriptor.toDict()}
             logging.info(report)
             return None
 
         det = {}
         det['awsAccountId'] = targetAccountId
         det['awsAccountName'] = targetAccountName
-        det['awsAccountEmail'] = targetAccountEmail
+        det['awsAccountEmail'] = optTargetDescriptor.accountEmail
         det['awsRegion'] = dispatch['awsRegion']
-        det['roleName'] = targetRole
+        det['roleName'] = optTargetDescriptor.roleName
         det['resourceType'] = dispatch['resourceType']
         det['resourceId'] = resourceId
         target = DispatchEventTarget(det)
@@ -150,10 +157,10 @@ class Parser:
         return {'functionName': functionName, 'event': event}
 
     def createInvokeList(self, dispatchList) -> List[RuleInvocation]:
-        optLandingZone = self._discover.discoverLandingZone()
+        landingZoneDescriptor = self._discover.getLandingZoneDescriptor()
         invokeList = []
         for dispatch in dispatchList:
-            optInvoke = self.create_invoke(optLandingZone, dispatch)
+            optInvoke = self.create_invoke(landingZoneDescriptor, dispatch)
             if not optInvoke: continue
             invoke = RuleInvocation(optInvoke['functionName'], optInvoke['event'])
             invokeList.append(invoke)

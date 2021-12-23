@@ -1,37 +1,53 @@
 import argparse
 
-import cmds.precheck as cmd_precheck
-import cmds.initialise as cmd_initialise
+import lib.base
+import lib.rdq
 
-def sub_precheck(args):
-    try:
-        print("Verifying...")
-        cmd_precheck.handler(args)
-    except Exception as e:
-        print("Verification failed")
-        print(e)
+import cmds.precheck
+import cmds.initialise
 
-def sub_init(args):
-    try:
-        print("Initialising...")
-        cmd_initialise.handler(args)
-    except Exception as e:
-        print("Initialisation failed")
-        print(e)
+helpPrecheck = '''
+Check whether the pre-requisites for installation are satisfied.
+'''
 
-def sub_rules(args):
-    print("Rules.."+args)
+helpInit = '''
+Install the default remediation pack into your landing zone or test environment.
+'''
+
+helpInitLocal = '''
+Forces a local-account-only installation of the remediation pack when an Organization is detected.
+If the remediation pack is installed in a stand-alone account, installation will always be local.
+'''
+
+helpCode = '''
+Upload and deploy lambda code and configuration.
+'''
+
+helpCodeCore = '''
+Upload and deploy core lambda code and configuration from the 'core' sub-folders
+'''
+helpCodeRules = '''
+Upload and deploy all lambda code and configuration from the 'rules' sub-folders
+'''
+
+def main():
+    topparser = argparse.ArgumentParser()
+    subparsers = topparser.add_subparsers(dest='subcmd', required=True)
+    parser_precheck = subparsers.add_parser('precheck', help=helpPrecheck)
+    parser_init = subparsers.add_parser('init', help=helpInit)
+    parser_init.add_argument('--local',dest='forcelocal', action='store_true', help=helpInitLocal)
+    parser_code = subparsers.add_parser('code', help=helpCode)
+    parser_code.add_argument('--core',dest='core', action='store_true', help=helpCodeCore)
+    parser_code.add_argument('--rules',dest='rules', action='store_true', help=helpCodeRules)
+    args = topparser.parse_args()
+    subcmd = args.subcmd
+    if subcmd == 'init': cmds.initialise.handler(args)
 
 
-topparser = argparse.ArgumentParser()
-subparsers = topparser.add_subparsers(help="sub-command help")
-parser_precheck = subparsers.add_parser('precheck', help="precheck help")
-parser_precheck.set_defaults(func=sub_precheck)
-parser_init = subparsers.add_parser('init', help="init help")
-parser_init.add_argument('--cpack-prefix',dest='cpackPrefix', required=True, default="NZISM", help="Conformance Pack Prefix")
-parser_init.set_defaults(func=sub_init)
-parser_rules = subparsers.add_parser('rules', help="rules help")
-parser_rules.set_defaults(func=sub_rules)
-args = topparser.parse_args()
-args.func(args)
-
+lib.base.initLogging(defaultLevel='WARNING', announceLogLevel=False)
+try:
+    main()
+except lib.rdq.RdqCredentialsWarning as e:
+    print(e.message)
+except lib.base.ConfigError as e:
+    print(e.message)

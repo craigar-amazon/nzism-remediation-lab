@@ -1,64 +1,92 @@
 import logging
 
-from lib.base import selectConfig
+from lib.base import selectConfig, ConfigError
 from lib.rdq import Profile
 from lib.rdq.svciam import IamClient
 from lib.rdq.svcorg import OrganizationClient, AccountDescriptor, OrganizationDescriptor
 
 import cfg.roles as cfgroles
 
-def isLandingZoneDiscoveryEnabled():
-    lzsearch = cfgroles.landingZoneSearch()
-    if not lzsearch: return False
-    return len(lzsearch) > 1
+class LandingZoneDescriptor:
+    def __init__(self, props :dict=None):
+        isStandalone = True
+        if props:
+            self._props = props
+            isStandalone = False
+        else:
+            self._props = {}
+        self._props['IsStandalone'] = isStandalone
+
+    @property
+    def isStandalone(self) -> bool: return self._props.get('IsStandalone')
+
+    @property
+    def landingZoneType(self) -> str: return self._props.get('LandingZone')
+
+    @property
+    def auditRoleName(self) -> str: return self._props.get('AuditRoleName')
+
+    @property
+    def auditRoleArn(self) -> str: return self._props.get('AuditRoleArn')
+
+    @property
+    def remediationRoleName(self) -> str: return self._props.get('RemediationRoleName')
+
+    @property
+    def isVerified(self) -> bool: return self._props.get('IsVerified')
+
+    def toDict(self): return self._props
 
 class LandingZoneDiscovery:
-    def __init__(self, profile :Profile):
+    def __init__(self, profile :Profile, requireRoleVerification=False):
         self._profile = profile
         self._iamClient = IamClient(profile)
         self._orgClient = OrganizationClient(profile)
+        self._requireRoleVerification = requireRoleVerification
 
+    def landingzone_descriptor(self, lzType, verify) -> LandingZoneDescriptor:
+        lzroles = cfgroles.landingZoneRoles()
+        lzCfg = selectConfig(lzroles, "landingZoneRoles", lzType)
+        auditRoleName = selectConfig(lzCfg, lzType, 'Audit')
+        remediationRoleName = selectConfig(lzCfg, lzType, 'Remediation')
+        auditRoleArn = self._profile.getRoleArn(auditRoleName)
+        isVerified = False
+        if verify:
+            exAuditRole = self._iamClient.getRole(auditRoleName)
+            if exAuditRole:
+                auditRoleArn = exAuditRole['Arn']
+                isVerified = True
+        props = {
+            'LandingZone': lzType,
+            'AuditRoleName': auditRoleName,
+            'AuditRoleArn': auditRoleArn,
+            'RemediationRoleName': remediationRoleName,
+            'IsVerified': isVerified
+        }
+        return LandingZoneDescriptor(props)
+ 
     def getAccountDescriptor(self, accountId) -> AccountDescriptor:
         return self._orgClient.getAccountDescriptor(accountId) 
 
     def getOrganizationDescriptor(self) -> OrganizationDescriptor:
         return self._orgClient.getOrganizationDescriptor()
 
-    def discoverLandingZone(self):
-        lzsearch = cfgroles.landingZoneSearch()
-        if not lzsearch:
-            logging.info("No landing zone configured. Will assume single account.")
-            return None
-
+    def getLandingZoneDescriptor(self) -> LandingZoneDescriptor:
+        lzsearchIn = cfgroles.landingZoneSearch()
+        lzsearch = list() if lzsearchIn is None else list(lzsearchIn)
         searchLength = len(lzsearch)
-        lzroles = cfgroles.landingZoneRoles()
-        lz = lzsearch[0]
-        lzcfg = selectConfig(lzroles, "landingZoneRoles", lz)
-        auditRoleName = selectConfig(lzcfg, lz, 'Audit')
-        remediationRoleName = selectConfig(lzcfg, lz, 'Remediation')
-        preferredAuditRoleArn = self._profile.getRoleArn(auditRoleName)
-        discoveredAuditRoleArn = None
-        if searchLength > 1:
-            for lz in lzsearch:
-                lzcfg = selectConfig(lzroles, "landingZoneRoles", lz)
-                auditRoleName = selectConfig(lzcfg, lz, 'Audit')
-                remediationRoleName = selectConfig(lzcfg, lz, 'Remediation')
-                exAuditRole = self._iamClient.getRole(auditRoleName)
-                if exAuditRole:
-                    discoveredAuditRoleArn = exAuditRole['Arn']
-                    break
-        if discoveredAuditRoleArn:
-            auditRoleArn = discoveredAuditRoleArn
-            if auditRoleArn == preferredAuditRoleArn:
-                logging.info("Discovered preferred audit role %s", auditRoleArn)
-            else:
-                logging.warning("Discovered audit role %s - but preferred %s", auditRoleArn, preferredAuditRoleArn)
-        else:
-            auditRoleArn = preferredAuditRoleArn
-            logging.info("Using preferred audit role %s (unverified)", auditRoleArn)
-        return {
-            'LandingZone': lz,
-            'AuditRoleName': auditRoleName,
-            'AuditRoleArn': auditRoleArn,
-            'RemediationRoleName': remediationRoleName
-        }
+        if searchLength == 0:
+            logging.info("No landing zone configured. Will assume stand-alone account.")
+            return LandingZoneDescriptor()
+
+        preferredLzType = lzsearch[0]
+        preferredDescriptor = self.landingzone_descriptor(preferredLzType, verify=False)
+        verifyRequired = (searchLength > 1) or self._requireRoleVerification
+        if not verifyRequired: return preferredDescriptor
+        for lzType in lzsearch:
+            descriptor = self.landingzone_descriptor(lzType, verify=True)
+            if descriptor.isVerified: return descriptor
+        
+        searchPath = ", ".join(lzsearch)
+        syn = "Failed to verify landing zone roles on search path: {}".format(searchPath)
+        raise ConfigError(syn)

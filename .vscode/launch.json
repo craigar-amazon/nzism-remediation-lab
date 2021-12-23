@@ -13,13 +13,10 @@
             "console": "integratedTerminal"
         },
         {
-            "name": "Installer verify",
+            "name": "Installer base",
             "type": "python",
             "request": "launch",
             "program": "src/installer.py",
-            "args": [
-                "verify"
-            ],
             "console": "integratedTerminal"
         },
         {
@@ -28,7 +25,7 @@
             "request": "launch",
             "program": "src/installer.py",
             "args": [
-                "init", "--cpack-prefix", "NZ1"
+                "init"
             ],
             "console": "integratedTerminal"
         },
