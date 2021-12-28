@@ -4,7 +4,7 @@ from lib.base import Tags, DeltaBuild
 from lib.rdq import RdqError
 from lib.rdq.base import ServiceUtils
 
-class SQSClient:
+class SqsClient:
     def __init__(self, profile):
         service = 'sqs'
         self._profile = profile

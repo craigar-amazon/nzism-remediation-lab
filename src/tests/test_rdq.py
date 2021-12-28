@@ -5,7 +5,7 @@ from lib.rdq.svciam import IamClient
 from lib.rdq.svcorg import OrganizationClient, OrganizationDescriptor
 from lib.rdq.svclambda import LambdaClient
 from lib.rdq.svckms import KmsClient
-from lib.rdq.svcsqs import SQSClient
+from lib.rdq.svcsqs import SqsClient
 from lib.rdq.svceventbridge import EventBridgeClient
 from lib.rdq.svccfn import CfnClient
 import lib.rdq.policy as policy
@@ -173,7 +173,7 @@ class TestRdq(unittest.TestCase):
         profile = Profile()
         ebc = EventBridgeClient(profile)
         kmsc = KmsClient(profile)
-        sqsc = SQSClient(profile)
+        sqsc = SqsClient(profile)
         orgc = OrganizationClient(profile)
 
         tags = Tags({'Application': 'NZISM Auto Remediation'})
@@ -228,7 +228,7 @@ class TestRdq(unittest.TestCase):
         kmsc = KmsClient(profile)
         lambdac = LambdaClient(profile)
         ebc = EventBridgeClient(profile)
-        sqsc = SQSClient(profile)
+        sqsc = SqsClient(profile)
 
         queueCfg = cfgCore.coreQueueCfg()
         sqsVisibilityTimeoutSecs = queueCfg['SqsVisibilityTimeoutSecs']

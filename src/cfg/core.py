@@ -6,6 +6,8 @@ dispatchTimeoutSecs = (ruleTimeoutSecs * sqsBatchSize) + 30
 dispatchTimeoutCappedSecs = min(dispatchTimeoutSecs, base.lambdaMaxSecs)
 sqsVisibilityTimeoutSecs = dispatchTimeoutCappedSecs + 30
 
+namespace = "NZISM"
+
 def folderConfig():
     return {
         'CodeHome': './src',
@@ -17,17 +19,20 @@ def folderConfig():
     }
 
 def coreFunctionName(codeFolder):
-    return "NZISM-Core-{}".format(codeFolder)
+    return "{}-Core-{}".format(namespace, codeFolder)
 
 def ruleFunctionName(codeFolder):
-    return "NZISM-AutoRemediation-{}".format(codeFolder)
+    return "{}-AutoRemediation-{}".format(namespace, codeFolder)
 
 def coreResourceName(baseName):
-    return "NZISM-{}".format(baseName)
+    return "{}-{}".format(namespace, baseName)
+
+def coreQueueCMKAlias():
+    return "queued_events"
 
 def coreResourceTags():
     return {
-        'Application': 'NZISM Auto Remediation',
+        'Application': "{} Auto Remediation".format(namespace),
         'Release': '0.1'
     }
 
@@ -58,7 +63,7 @@ def coreQueueCfg():
     }
 
 def coreCloudWatchNamespace(action):
-    return "NZISM-{}".format(action)
+    return "{}-{}".format(namespace, action)
 
 def coreCloudWatchDimensionList(action):
     return [
@@ -70,7 +75,7 @@ def coreCloudWatchDimensionList(action):
 
 def ruleResourceTags():
     return {
-        'Application': 'NZISM Auto Remediation',
+        'Application': "{} Auto Remediation".format(namespace),
         'Release': '0.1'
     }
 

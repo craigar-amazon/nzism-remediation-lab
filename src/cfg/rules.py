@@ -28,7 +28,9 @@ ruleTable.put('cloudwatch-log-group-encrypted', {
 def conformancePackName(): return "NZISM"
 
 def stackNamePattern(configRuleName, action, accountName):
-    return "NZISM-AutoDeployed-{}"
+    cpName = conformancePackName()
+    prefix = "{}-AutoDeployed-".format(cpName)
+    return prefix + "{}"
 
 def manualRemediationTagName(configRuleName, action, accountName):
     return 'ManualRemediation'

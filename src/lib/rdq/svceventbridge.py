@@ -69,6 +69,7 @@ class EventBridgeClient:
                     rules.append(item)
             return rules
         except botocore.exceptions.ClientError as e:
+            if self._utils.is_resource_not_found(e): return []
             raise RdqError(self._utils.fail(e, op, 'EventBusName', eventBusName))
 
     def describe_rule(self, eventBusName, ruleName):
@@ -122,6 +123,7 @@ class EventBridgeClient:
                     targets.append(item)
             return targets
         except botocore.exceptions.ClientError as e:
+            if self._utils.is_resource_not_found(e): return []
             raise RdqError(self._utils.fail(e, op, 'EventBusName', eventBusName, 'RuleName', ruleName))
 
     def list_target_ids(self, eventBusName, ruleName):
@@ -140,6 +142,7 @@ class EventBridgeClient:
 
     def put_targets(self, eventBusName, ruleName, targets):
         op = 'put_targets'
+        if len(targets) == 0: return
         try:
             self._client.put_targets(
                 EventBusName=eventBusName,
@@ -151,6 +154,7 @@ class EventBridgeClient:
 
     def remove_targets(self, eventBusName, ruleName, targetIds):
         op = 'remove_targets'
+        if len(targetIds) == 0: return
         try:
             self._client.remove_targets(
                 EventBusName=eventBusName,
