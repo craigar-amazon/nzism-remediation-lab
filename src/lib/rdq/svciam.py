@@ -1,3 +1,4 @@
+import json
 import botocore
 
 from lib.base import Tags, DeltaBuild
@@ -15,6 +16,40 @@ def _canon_path(path):
 
 def _policy_arn_aws(path, policyName):
     return 'arn:aws:iam::aws:policy{}{}'.format(_canon_path(path), policyName)
+
+class RoleDescriptor:
+    def __init__(self, props):
+        self._props = props
+
+    @property
+    def arn(self):
+        return self._props['Arn']
+
+    @property
+    def roleId(self):
+        return self._props['RoleId']
+
+    @property
+    def path(self):
+        return self._props['Path']
+
+    @property
+    def roleName(self):
+        return self._props['RoleName']
+
+    @property
+    def description(self):
+        return self._props['Description']
+
+    def getTags(self):
+        return Tags(self._props.get('Tags'), self._props['RoleName'])
+
+    def toDict(self) -> dict:
+        return self._props
+
+    def __str__(self):
+        return json.dumps(self._props)
+
 
 class IamClient:
     def __init__(self, profile):
@@ -336,8 +371,9 @@ class IamClient:
         self.delete_policy_versions(policyArn)
         self.delete_policy(policyArn)
 
-    def getRole(self, roleName):
-        return self.get_role(roleName)
+    def getRoleDescriptor(self, roleName) -> RoleDescriptor:
+        exRole = self.get_role(roleName)
+        return RoleDescriptor(exRole) if exRole else None
 
     def declareRoleArn(self, roleName, roleDescription, trustPolicyMap, tags, rolePath='/', maxSessionSecs=3600):
         dbUpdate = DeltaBuild()
@@ -399,7 +435,7 @@ class IamClient:
         self.declareManagedPoliciesForRole(roleName, managedPolicyArns)
         self.declareInlinePoliciesForRole(roleName, inlinePolicyMap)
 
-    def deleteRole(self, roleName):
+    def removeRole(self, roleName):
         self.declareManagedPoliciesForRole(roleName, [])
         self.declareInlinePoliciesForRole(roleName, {})
         self.delete_role(roleName)

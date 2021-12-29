@@ -158,7 +158,7 @@ class SqsClient:
         
 
     # PREVIEW
-    def deleteQueue(self, queueName):
+    def removeQueue(self, queueName):
         exUrl = self.get_queue_url(queueName)
         if exUrl:
             self.delete_queue(exUrl)

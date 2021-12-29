@@ -30,6 +30,16 @@
             "console": "integratedTerminal"
         },
         {
+            "name": "Installer code",
+            "type": "python",
+            "request": "launch",
+            "program": "src/installer.py",
+            "args": [
+                "code", "--core"
+            ],
+            "console": "integratedTerminal"
+        },
+        {
             "name": "Installer remove",
             "type": "python",
             "request": "launch",

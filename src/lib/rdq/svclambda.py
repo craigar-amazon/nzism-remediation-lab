@@ -330,7 +330,7 @@ class LambdaClient:
         self.remove_permission(functionArn, sid)
         self.add_permission(functionArn, sid, action, principal, sourceArn)
 
-    def deleteFunction(self, functionName):
+    def removeFunction(self, functionName):
         return self.delete_function(functionName)
 
     def declareEventSourceMappingUUID(self, functionName, eventSourceArn, cfg):
@@ -354,7 +354,7 @@ class LambdaClient:
         mappings = self.list_event_source_mappings_all(functionName)
         self.enable_event_source_mappings(mappings, isEnabled)
 
-    def deleteEventSourceMapping(self, functionName, eventSourceArn):
+    def removeEventSourceMapping(self, functionName, eventSourceArn):
         exMapping = self.find_event_source_mapping(functionName, eventSourceArn)
         if not exMapping: return False
         uuid = exMapping['UUID']

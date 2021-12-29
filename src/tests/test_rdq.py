@@ -83,7 +83,7 @@ class TestRdq(unittest.TestCase):
         assert roleArn2 == expectedRoleArn
         roleArn3 = iam.declareRoleArn(roleName, roleDescription2, trustPolicy2, tagsB)
         assert roleArn3 == expectedRoleArn
-        iam.deleteRole(roleName)
+        iam.removeRole(roleName)
         assert not iam.getRole(roleName)
 
     def test_role_build(self):
@@ -110,7 +110,7 @@ class TestRdq(unittest.TestCase):
         iam.declareInlinePoliciesForRole(roleName, {'QueueA': policyMapSQS1})
         iam.declareInlinePoliciesForRole(roleName, {'QueueA': policyMapSQS2, 'QueueB': policyMapSQS1})
         iam.declareInlinePoliciesForRole(roleName, {'QueueB': policyMapSQS2})
-        iam.deleteRole(roleName)
+        iam.removeRole(roleName)
         assert not iam.getRole(roleName)
 
 
@@ -132,8 +132,8 @@ class TestRdq(unittest.TestCase):
             'Timeout': 180,
             'MemorySize': 128
         }
-        iamc.deleteRole(roleName)
-        lambdac.deleteFunction(functionName)
+        iamc.removeRole(roleName)
+        lambdac.removeFunction(functionName)
         expectedLambdaArn = profile.getRegionAccountArn('lambda', "function:{}".format(functionName))
         roleArn = iamc.declareRoleArn(roleName, roleDescription, lambdaTrustPolicy, tags)
         iamc.declareManagedPoliciesForRole(roleName, [lambdaPolicyArn])
@@ -153,8 +153,8 @@ class TestRdq(unittest.TestCase):
         assert 'StatusCode' in functionOut
         assert functionOut['StatusCode'] == 200
 
-        lambdac.deleteFunction(functionName)
-        iamc.deleteRole(roleName)
+        lambdac.removeFunction(functionName)
+        iamc.removeRole(roleName)
 
     def test_cmk(self):
         sqsCmkDescription = "Encryption for SQS queued events"
@@ -219,7 +219,7 @@ class TestRdq(unittest.TestCase):
 
         print("Done")
 
-        sqsc.deleteQueue(queueName)
+        sqsc.removeQueue(queueName)
         ebc.removeEventBus(eventBusName)
 
     def test_dispatcher(self):
@@ -258,7 +258,7 @@ class TestRdq(unittest.TestCase):
         lambdaRoleName = cfgCore.coreResourceName('ComplianceDispatcher-LambdaRole')
         functionName = cfgCore.coreFunctionName(codeFolder)
         functionDescription = 'Compliance Dispatcher Lambda'
-        functionCfg = cfgCore.coreFunctionCfg()
+        functionCfg = cfgCore.dispatchFunctionCfg()
 
         landingZoneDiscovery = LandingZoneDiscovery(profile)
         landingZoneConfig = landingZoneDiscovery.discoverLandingZone()
@@ -309,11 +309,11 @@ class TestRdq(unittest.TestCase):
 
         for ruleFolder in ruleFolders:
             rFunctionName = cfgCore.ruleFunctionName(ruleFolder)
-            lambdac.deleteFunction(rFunctionName)
-        lambdac.deleteEventSourceMapping(functionName, sqsArn)
-        lambdac.deleteFunction(functionName)
-        iamc.deleteRole(lambdaRoleName)
-        sqsc.deleteQueue(queueName)
+            lambdac.removeFunction(rFunctionName)
+        lambdac.removeEventSourceMapping(functionName, sqsArn)
+        lambdac.removeFunction(functionName)
+        iamc.removeRole(lambdaRoleName)
+        sqsc.removeQueue(queueName)
         ebc.removeEventBus(eventBusName)
 
 

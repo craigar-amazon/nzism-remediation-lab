@@ -2,7 +2,7 @@ import logging
 
 from lib.base import selectConfig, ConfigError
 from lib.rdq import Profile
-from lib.rdq.svciam import IamClient
+from lib.rdq.svciam import IamClient, RoleDescriptor
 from lib.rdq.svcorg import OrganizationClient, AccountDescriptor, OrganizationDescriptor
 
 import cfg.roles as cfgroles
@@ -44,6 +44,9 @@ class LandingZoneDiscovery:
         self._orgClient = OrganizationClient(profile)
         self._requireRoleVerification = requireRoleVerification
 
+    def get_role_descriptor(self, roleName) -> RoleDescriptor:
+        return self._iamClient.getRoleDescriptor(roleName)
+
     def landingzone_descriptor(self, lzType, verify) -> LandingZoneDescriptor:
         lzroles = cfgroles.landingZoneRoles()
         lzCfg = selectConfig(lzroles, "landingZoneRoles", lzType)
@@ -52,9 +55,9 @@ class LandingZoneDiscovery:
         auditRoleArn = self._profile.getRoleArn(auditRoleName)
         isVerified = False
         if verify:
-            exAuditRole = self._iamClient.getRole(auditRoleName)
-            if exAuditRole:
-                auditRoleArn = exAuditRole['Arn']
+            optAuditRoleDescriptor = self.get_role_descriptor(auditRoleName)
+            if optAuditRoleDescriptor:
+                auditRoleArn = optAuditRoleDescriptor.arn
                 isVerified = True
         props = {
             'LandingZone': lzType,

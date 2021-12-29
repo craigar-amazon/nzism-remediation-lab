@@ -36,7 +36,7 @@ def coreResourceTags():
         'Release': '0.1'
     }
 
-def coreFunctionCfg():
+def dispatchFunctionCfg():
     return {
         'Runtime': 'python3.8',
         'Timeout': dispatchTimeoutCappedSecs,

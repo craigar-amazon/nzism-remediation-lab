@@ -34,8 +34,14 @@ helpRemove = '''
 Remove the remediation pack namespace from your landing zone or stand-alone account.
 '''
 
+helpRemoveCmks = '''
+Include the scheduled removal of Customer Managed Keys (CMKs) in the resource removal process.
+A retained CMK will be re-used if the pack is subsequently re-installed with the same CMK alias.
+'''
+
 def main(subcmd):
-    if subcmd == 'init': cmds.builder.install(args)
+    if subcmd == 'init': cmds.builder.init(args)
+    elif subcmd == 'code': cmds.builder.code(args)
     elif subcmd == 'remove': cmds.builder.remove(args)
 
 
@@ -49,7 +55,7 @@ parser_code = subparsers.add_parser('code', help=helpCode)
 parser_code.add_argument('--core',dest='core', action='store_true', help=helpCodeCore)
 parser_code.add_argument('--rules',dest='rules', action='store_true', help=helpCodeRules)
 parser_remove = subparsers.add_parser('remove', help=helpRemove)
-parser_remove.add_argument('--remove-cmks',dest='removecmks', action='store_true', help=helpInitLocal)
+parser_remove.add_argument('--remove-cmks',dest='removecmks', action='store_true', help=helpRemoveCmks)
 args = topparser.parse_args()
 if args.verbose:
     lib.base.initLogging(defaultLevel='INFO', announceLogLevel=True)
