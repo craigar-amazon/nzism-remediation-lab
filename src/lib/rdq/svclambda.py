@@ -256,7 +256,12 @@ class LambdaClient:
             uuid = mapping['UUID']
             self.enable_event_source_mapping_for_uuid(uuid, enabled)
 
-    def delete_event_source_mapping(self, uuid):
+    def delete_event_source_mappings(self, mappings):
+        for mapping in mappings:
+            uuid = mapping['UUID']
+            self.delete_event_source_mapping_for_uuid(uuid)
+
+    def delete_event_source_mapping_for_uuid(self, uuid):
         op = 'delete_event_source_mapping'
         tracker = self._utils.init_tracker(op)
         while True:
@@ -264,6 +269,7 @@ class LambdaClient:
                 self._client.delete_event_source_mapping(
                     UUID=uuid
                 )
+                return
             except botocore.exceptions.ClientError as e:
                 if self._utils.is_resource_not_found(e): return
                 if self._utils.retry_resource_in_use(e, tracker):
@@ -358,8 +364,12 @@ class LambdaClient:
         exMapping = self.find_event_source_mapping(functionName, eventSourceArn)
         if not exMapping: return False
         uuid = exMapping['UUID']
-        self.delete_event_source_mapping(uuid)
+        self.delete_event_source_mapping_for_uuid(uuid)
         return True
+
+    def removeEventSourceMappingsForFunction(self, functionName):
+        mappings = self.list_event_source_mappings_all(functionName)
+        self.delete_event_source_mappings(mappings)
 
     def invokeFunctionJson(self, functionName, payloadMap):
         return self.invoke_function_json(functionName, payloadMap)

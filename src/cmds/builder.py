@@ -16,12 +16,16 @@ from lib.lambdas.discovery import LandingZoneDiscovery
 import cfg.core
 import cmds.codeLoader as codeLoader
 
-def getValue(map, mapPath, key):
+def get_value(map, mapPath, key):
     if map is None: raise ConfigError("{} is undefined".format(mapPath))
     if len(map) == 0: raise ConfigError("{} is empty".format(mapPath))
     value = map.get(key, None)
     if value is None: raise ConfigError("{} in {} is undefined", key, mapPath)
     return value
+
+def getCoreEventBusCfgValue(key): return get_value(cfg.core.coreEventBusCfg(), "cfg.core.coreEventBusCfg", key)
+def getCoreQueueCfgValue(key): return get_value(cfg.core.coreQueueCfg(), "cfg.core.coreQueueCfg", key)
+
 
 class Clients:
     def __init__(self, args, profile :Profile):
@@ -43,6 +47,7 @@ class BaseState:
         self.queueName = cfg.core.coreResourceName('ComplianceChangeQueue')
         self.dispatchLambdaRoleName = cfg.core.coreResourceName('ComplianceDispatcher-LambdaRole')
         self.dispatchLambdaCodeName = 'ComplianceDispatcher'
+        self.dispatchFunctionName = cfg.core.coreFunctionName(self.dispatchLambdaCodeName)
 
 
 class LandingZoneState:
@@ -83,7 +88,9 @@ def eventBusState(clients :Clients, base :BaseState) -> EventBusState:
     return EventBusState(ruleArn)
 
 def eventBusRemove(clients : Clients, base: BaseState):
-    clients.eb.removeEventBus(base.eventBusName)
+    eventBusName = base.eventBusName
+    clients.eb.removeEventBus(eventBusName)
+    print("Removed {}".format(eventBusName))
 
 class EventQueueState:
     def __init__(self, queueArn, cmkArn):
@@ -91,8 +98,6 @@ class EventQueueState:
         self.cmkArn = cmkArn
 
 def eventQueueState(clients :Clients, base :BaseState, eventBus :EventBusState) -> EventQueueState:
-    cfgPath = "cfg.core.coreQueueCfg"
-    cfgMap = cfg.core.coreQueueCfg()
     eventBridge = policy.principalEventBridge()
     cmkStatements = [
         policy.allowCMKForServiceProducer(base.profile, policy.serviceNamespaceSQS(), eventBridge)
@@ -103,19 +108,22 @@ def eventQueueState(clients :Clients, base :BaseState, eventBus :EventBusState) 
     sqsStatements = [
          policy.allowSQSForServiceProducer(base.profile, base.queueName, eventBridge, eventBus.complianceChangeRuleArn)
     ]
-    visibilityTimeoutSecs = getValue(cfgMap,cfgPath, 'SqsVisibilityTimeoutSecs')
+    visibilityTimeoutSecs = getCoreQueueCfgValue('SqsVisibilityTimeoutSecs')
     queueArn = clients.sqs.declareQueueArn(base.queueName, cmkArn, sqsStatements, visibilityTimeoutSecs, base.tagsCore)
+    print("Queue ARN: {}".format(queueArn))
     return EventQueueState(queueArn, cmkArn)
 
 def eventQueueRemove(clients : Clients, base: BaseState):
-    clients.sqs.removeQueue(base.queueName)
+    queueName = base.queueName
+    clients.sqs.removeQueue(queueName)
+    print("Removed {}".format(queueName))
     if base.args.removecmks:
-        clients.kms.removeCMK(base.sqsCmkAlias)
+        alias = base.sqsCmkAlias
+        clients.kms.removeCMK(alias)
+        print("Scheduled removal of {}".format(alias))
 
 def eventQueueTarget(clients :Clients, base :BaseState, eventQueue :EventQueueState):
-    cfgPath = "cfg.core.coreEventBusCfg"
-    cfgMap = cfg.core.coreEventBusCfg()
-    maxAgeSecs = getValue(cfgMap,cfgPath, 'RuleTargetMaxAgeSecs')
+    maxAgeSecs = getCoreEventBusCfgValue('RuleTargetMaxAgeSecs')
     clients.eb.declareEventBusTarget(
         base.eventBusName, base.complianceRuleName, base.queueName, eventQueue.queueArn, maxAgeSecs
     )
@@ -152,7 +160,9 @@ def dispatchLambdaRoleState(clients :Clients, base :BaseState, queue :EventQueue
     return DispatchLambdaRoleState(roleArn)
 
 def dispatchLambdaRoleRemove(clients :Clients, base :BaseState):
-    clients.iam.removeRole(base.dispatchLambdaRoleName)
+    roleName = base.dispatchLambdaRoleName
+    clients.iam.removeRole(roleName)
+    print("Removed {}".format(roleName))
 
 def dispatchLambdaRoleVerify(clients :Clients, base :BaseState) -> DispatchLambdaRoleState:
     roleName = base.dispatchLambdaRoleName
@@ -166,7 +176,7 @@ class DispatchLambdaState:
         self.lambdaArn = lambdaArn
 
 def dispatchLambdaState(clients: Clients, base: BaseState, role: DispatchLambdaRoleState) -> DispatchLambdaState:
-    functionName = cfg.core.coreFunctionName(base.dispatchLambdaCodeName)
+    functionName = base.dispatchFunctionName
     functionDesc = 'Compliance Dispatcher Lambda'
     functionCfg = cfg.core.dispatchFunctionCfg()
     codeZip = codeLoader.getCoreCode(base.dispatchLambdaCodeName)
@@ -175,8 +185,18 @@ def dispatchLambdaState(clients: Clients, base: BaseState, role: DispatchLambdaR
     return DispatchLambdaState(lambdaArn)
 
 def dispatchLambdaRemove(clients: Clients, base: BaseState):
-    functionName = cfg.core.coreFunctionName(base.dispatchLambdaCodeName)
+    functionName = base.dispatchFunctionName
     clients.lambdafun.removeFunction(functionName)
+    print("Removed {}".format(functionName))
+
+def dispatchLambdaQueueConsumerState(clients: Clients, base: BaseState, dispatchLambda :DispatchLambdaState, eventQueue: EventQueueState):
+    sqsPollCfg = getCoreQueueCfgValue('SqsPollCfg')
+    uuid = clients.lambdafun.declareEventSourceMappingUUID(base.dispatchFunctionName, eventQueue.queueArn, sqsPollCfg)
+    print("Queue {} is mapped as event source for {} (UUID {})".format(eventQueue.queueArn, dispatchLambda.lambdaArn, uuid))
+
+def dispatchLambdaQueueConsumerRemove(clients: Clients, base: BaseState):
+    clients.lambdafun.removeEventSourceMappingsForFunction(base.dispatchFunctionName)
+
 
 def init(args):
     profile = Profile()
@@ -189,19 +209,24 @@ def init(args):
     eventBusPermission(clients, base, landingZone)
     dispatchLambdaRole = dispatchLambdaRoleState(clients, base, eventQueue, landingZone)
     dispatchLambda = dispatchLambdaState(clients, base, dispatchLambdaRole)
+    dispatchLambdaQueueConsumerState(clients, base, dispatchLambda, eventQueue)
+
+def codeCore(clients, base):
+    dispatchLambdaRole = dispatchLambdaRoleVerify(clients, base)
+    dispatchLambdaState(clients, base, dispatchLambdaRole)
 
 def code(args):
     profile = Profile()
     clients = Clients(args, profile)
     base = BaseState(args, profile)
     if args.core:
-        dispatchLambdaRole = dispatchLambdaRoleVerify(clients, base)
-        dispatchLambdaState(clients, base, dispatchLambdaRole)
+        codeCore(clients, base)
 
 def remove(args):
     profile = Profile()
     clients = Clients(args, profile)
     base = BaseState(args, profile)
+    dispatchLambdaQueueConsumerRemove(clients, base)
     dispatchLambdaRemove(clients, base)
     dispatchLambdaRoleRemove(clients, base)
     eventQueueRemove(clients, base)
