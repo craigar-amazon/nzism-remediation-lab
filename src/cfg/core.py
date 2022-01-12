@@ -85,3 +85,6 @@ def ruleFunctionCfg(codeFolder):
         'Timeout': ruleTimeoutSecs,
         'MemorySize': 128
     }
+
+def environmentVariableNameRemediationRole():
+    return 'REMEDIATIONROLE'

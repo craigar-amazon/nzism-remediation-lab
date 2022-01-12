@@ -3,6 +3,7 @@ import botocore
 
 from lib.base import Tags, DeltaBuild
 from lib.rdq import RdqError
+from lib.rdq.policy import AwsPolicyName
 from lib.rdq.base import ServiceUtils
 
 def _canon_path(path):
@@ -13,9 +14,6 @@ def _canon_path(path):
     if path[-1] != '/':
         cpath = cpath +'/'
     return cpath
-
-def _policy_arn_aws(path, policyName):
-    return 'arn:aws:iam::aws:policy{}{}'.format(_canon_path(path), policyName)
 
 class RoleDescriptor:
     def __init__(self, props):
@@ -332,16 +330,16 @@ class IamClient:
             self.delete_policy_version(policyArn, versionId)
             count = count - 1
     
-    def getAwsPolicy(self, policyName, policyPath='/service-role/'):
-        policyArn = _policy_arn_aws(policyPath, policyName)
+    def getAwsPolicy(self, policyName :AwsPolicyName):
+        policyArn = policyName.policyArn
         return self.get_policy(policyArn)
 
     def getCustomerPolicy(self, policyName, policyPath='/'):
         policyArn = self._policy_arn_customer(policyPath, policyName)
         return self.get_policy(policyArn)
 
-    def declareAwsPolicyArn(self, policyName, policyPath='/service-role/'):
-        policyArn = _policy_arn_aws(policyPath, policyName)
+    def declareAwsPolicyArn(self, policyName :AwsPolicyName):
+        policyArn = policyName.policyArn
         exPolicy = self.get_policy(policyArn)
         if not exPolicy:
             erm = "AWS Policy {} is undefined".format(policyArn)

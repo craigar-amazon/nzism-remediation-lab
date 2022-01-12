@@ -1,5 +1,24 @@
-def awsLambdaBasicExecution():
-    return "AWSLambdaBasicExecutionRole"
+class AwsPolicyName:
+    def __init__(self, policyName, policyPath='/'):
+        self._policyName = policyName
+        self._policyPath = policyPath
+    
+    @property
+    def policyName(self): return self._policyName
+
+    @property
+    def policyPath(self): return self._policyPath
+
+    @property
+    def policyArn(self):
+        return 'arn:aws:iam::aws:policy{}{}'.format(self._policyPath, self._policyName)
+
+def awsPolicyLambdaBasicExecution():
+    return AwsPolicyName("AWSLambdaBasicExecutionRole", "/service-role/")
+
+def awsPolicyAdministratorAccess():
+    return AwsPolicyName("AdministratorAccess", "/")
+
 
 def trustLambda():
     return trustService(principalLambda())
@@ -38,6 +57,20 @@ def trustAccount(accountId):
                 'Effect': "Allow",
                 'Principal': {
                     'AWS': "arn:aws:iam::{}:root".format(accountId)
+                },
+                "Action": "sts:AssumeRole"
+            }
+        ]
+    }
+
+def trustRole(roleArn):
+    return {
+        'Version': "2012-10-17",
+        'Statement': [
+            {
+                'Effect': "Allow",
+                'Principal': {
+                    'AWS': roleArn
                 },
                 "Action": "sts:AssumeRole"
             }
@@ -88,6 +121,16 @@ def allowDescribeIam(roleArn, sid="DescribeIam"):
         'Effect': "Allow",
         'Action': [
             "iam:GetRole"
+        ],
+        'Resource': roleArn
+    }
+
+def allowAssumeRole(roleArn, sid="AssumeRole"):
+    return {
+        'Sid': sid,
+        'Effect': "Allow",
+        'Action': [
+            "sts:AssumeRole"
         ],
         'Resource': roleArn
     }

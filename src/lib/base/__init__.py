@@ -1,6 +1,4 @@
-import os
-import json
-import logging
+import os, json, logging
 
 def initLogging(logLevelVariable='LOGLEVEL', defaultLevel='INFO', announceLogLevel=True):
     levelName = defaultLevel
@@ -38,7 +36,6 @@ class ConfigError(Exception):
 def selectConfig(srcmap, context, aname):
     if not (aname in srcmap):
         msg = "Attribute `{}` is missing from configuration. Context is {}".format(aname, context)
-        logging.error(msg)
         raise ConfigError(msg)
     return srcmap[aname]
 
@@ -81,7 +78,6 @@ class Tags:
             msg = "Unsupported tag format {}".format(type(tags))
             if context:
                 msg = msg + " used by attribute " + context
-            logging.error(msg)
             raise ConfigError(msg)
 
     def updateList(self, rlist, prefix=""):
@@ -345,3 +341,21 @@ class DeltaBuild:
                 diff[key] = rqVal
         return diff
 
+
+class DictBuild:
+    def __init__(self, src):
+        self._work = {} if src is None else dict(src)
+
+    def extend(self, path :str, value):
+        parts = path.split('.')
+        dst = self._work
+        depth = len(parts) - 1
+        for i in range(depth):
+            part = parts[i]
+            if not (part in dst):
+                dst[part] = {}
+            dst = dst[part]
+        dst[parts[depth]] = value
+
+    def toDict(self):
+        return dict(self._work)

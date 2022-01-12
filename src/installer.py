@@ -19,6 +19,15 @@ Forces a local-account-only installation of the remediation pack when an Organiz
 If the remediation pack is installed in a stand-alone account, installation will always be local.
 '''
 
+helpInitOU = '''
+A space-separated list of the Organization Units (OUs) into which compliance event forwarding rules will be deployed.
+This overrides the list provided in the cfg.org.py file.
+Specify '--ous Root' to forward compliance events for the whole Organization.
+You can specify an OU using: the OU identifier (e.g. ou-cafe-8ajx3n7c), the OU name (e.g. Security), or the full OU path,
+starting with Root, and using / as a separator (e.g Root/Infra/Prod). Use a full path if your OU naming convention allows
+local re-use of OU names (e.g. --ous Root/Infra/Prod  Root/Apps/Prod).
+'''
+
 helpCode = '''
 Upload and deploy lambda code and configuration.
 '''
@@ -51,6 +60,7 @@ subparsers = topparser.add_subparsers(dest='subcmd', required=True)
 parser_precheck = subparsers.add_parser('precheck', help=helpPrecheck)
 parser_init = subparsers.add_parser('init', help=helpInit)
 parser_init.add_argument('--local',dest='forcelocal', action='store_true', help=helpInitLocal)
+parser_init.add_argument('--ous',dest='ous', nargs='+', help=helpInitOU)
 parser_code = subparsers.add_parser('code', help=helpCode)
 parser_code.add_argument('--core',dest='core', action='store_true', help=helpCodeCore)
 parser_code.add_argument('--rules',dest='rules', action='store_true', help=helpCodeRules)

@@ -2,14 +2,13 @@ import unittest
 from lib.base import initLogging, Tags
 from lib.rdq import Profile
 from lib.rdq.svciam import IamClient
-from lib.rdq.svcorg import OrganizationClient, OrganizationDescriptor
+from lib.rdq.svcorg import OrganizationClient
 from lib.rdq.svclambda import LambdaClient
 from lib.rdq.svckms import KmsClient
 from lib.rdq.svcsqs import SqsClient
 from lib.rdq.svceventbridge import EventBridgeClient
 from lib.rdq.svccfn import CfnClient
 import lib.rdq.policy as policy
-from lib.lambdas.discovery import LandingZoneDiscovery
 
 import lib.cfn as cfn
 import lib.cfn.iam as iam
@@ -38,7 +37,7 @@ def test_assume_role(targetAccountId):
 class TestRdq(unittest.TestCase):
     def test_lambda_policy(self):
         iam = IamClient(Profile())
-        lambdaPolicyArn = iam.declareAwsPolicyArn(policy.awsLambdaBasicExecution())
+        lambdaPolicyArn = iam.declareAwsPolicyArn(policy.awsPolicyLambdaBasicExecution())
         assert lambdaPolicyArn == 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
 
     def test_policy_declare(self):
@@ -90,12 +89,12 @@ class TestRdq(unittest.TestCase):
         profile = Profile()
         iam = IamClient(profile)
         tags = Tags({'Application': 'NZISM Auto Remediation'})
-        lambdaPolicyName = policy.awsLambdaBasicExecution()
+        lambdaPolicyName = policy.awsPolicyLambdaBasicExecution()
         roleName = 'ComplianceChangeConsumerLambdaRole'
         expectedRoleArn = profile.getGlobalAccountArn('iam', "role/{}".format(roleName))
         roleDescription = 'Compliance change queue lambda consumer role'
         lambdaPolicyArn = iam.declareAwsPolicyArn(lambdaPolicyName)
-        lambdaPolicyArn1 = iam.declareAwsPolicyArn('AWSLambdaSQSQueueExecutionRole')
+        lambdaPolicyArn1 = iam.declareAwsPolicyArn(policy.awsPolicyAdministratorAccess())
         lambdaTrustPolicy = policy.trustLambda()
         roleArn1 = iam.declareRoleArn(roleName, roleDescription, lambdaTrustPolicy, tags)
         assert roleArn1 == expectedRoleArn
@@ -120,7 +119,7 @@ class TestRdq(unittest.TestCase):
         iamc = IamClient(profile)
         lambdac = LambdaClient(profile)
         tags = Tags({'Application': 'NZISM Auto Remediation'})
-        lambdaPolicyArn = iamc.declareAwsPolicyArn(policy.awsLambdaBasicExecution())
+        lambdaPolicyArn = iamc.declareAwsPolicyArn(policy.awsPolicyLambdaBasicExecution())
         lambdaTrustPolicy = policy.trustLambda()
         roleDescription = 'UnitTest1 Lambda Role'
         roleName = 'UnitTest1LambdaRole'
@@ -222,99 +221,99 @@ class TestRdq(unittest.TestCase):
         sqsc.removeQueue(queueName)
         ebc.removeEventBus(eventBusName)
 
-    def test_dispatcher(self):
-        profile = Profile()
-        iamc = IamClient(profile)
-        kmsc = KmsClient(profile)
-        lambdac = LambdaClient(profile)
-        ebc = EventBridgeClient(profile)
-        sqsc = SqsClient(profile)
+    # def test_dispatcher(self):
+    #     profile = Profile()
+    #     iamc = IamClient(profile)
+    #     kmsc = KmsClient(profile)
+    #     lambdac = LambdaClient(profile)
+    #     ebc = EventBridgeClient(profile)
+    #     sqsc = SqsClient(profile)
 
-        queueCfg = cfgCore.coreQueueCfg()
-        sqsVisibilityTimeoutSecs = queueCfg['SqsVisibilityTimeoutSecs']
-        sqsPollCfg = queueCfg['SqsPollCfg']
+    #     queueCfg = cfgCore.coreQueueCfg()
+    #     sqsVisibilityTimeoutSecs = queueCfg['SqsVisibilityTimeoutSecs']
+    #     sqsPollCfg = queueCfg['SqsPollCfg']
 
-        ebCfg = cfgCore.coreEventBusCfg()
-        ebTargetMaxAgeSecs = ebCfg['RuleTargetMaxAgeSecs']
+    #     ebCfg = cfgCore.coreEventBusCfg()
+    #     ebTargetMaxAgeSecs = ebCfg['RuleTargetMaxAgeSecs']
 
-        tagsCore = Tags(cfgCore.coreResourceTags(), "coreResourceTags")
-        tagsCore.putAll(Lifecycle="Unit Test")
-        tagsRule = Tags(cfgCore.ruleResourceTags(), "ruleResourceTags")
-        tagsRule.putAll(Lifecycle="Development")
+    #     tagsCore = Tags(cfgCore.coreResourceTags(), "coreResourceTags")
+    #     tagsCore.putAll(Lifecycle="Unit Test")
+    #     tagsRule = Tags(cfgCore.ruleResourceTags(), "ruleResourceTags")
+    #     tagsRule.putAll(Lifecycle="Development")
 
-        sqsCmkDescription = "Encryption for SQS queued events"
-        sqsCmkAlias = "queued_events"
-        eventBusName = cfgCore.coreResourceName('AutoRemediation')
-        queueName = cfgCore.coreResourceName('ComplianceChangeQueue')
-        ruleName = 'ComplianceChange'
-        ruleDescription = "Config Rule Compliance Change"
-        eventPattern = {
-            'source': ["aws.config"],
-            'detail-type': ["Config Rules Compliance Change"]
-        }
-        codeFolder = 'ComplianceDispatcher'
-        codeZip = codeLoader.getCoreCode(codeFolder)
-        lambdaRoleDescription = "Compliance Dispatcher Lambda Role"
-        lambdaRoleName = cfgCore.coreResourceName('ComplianceDispatcher-LambdaRole')
-        functionName = cfgCore.coreFunctionName(codeFolder)
-        functionDescription = 'Compliance Dispatcher Lambda'
-        functionCfg = cfgCore.dispatchFunctionCfg()
+    #     sqsCmkDescription = "Encryption for SQS queued events"
+    #     sqsCmkAlias = "queued_events"
+    #     eventBusName = cfgCore.coreResourceName('AutoRemediation')
+    #     queueName = cfgCore.coreResourceName('ComplianceChangeQueue')
+    #     ruleName = 'ComplianceChange'
+    #     ruleDescription = "Config Rule Compliance Change"
+    #     eventPattern = {
+    #         'source': ["aws.config"],
+    #         'detail-type': ["Config Rules Compliance Change"]
+    #     }
+    #     codeFolder = 'ComplianceDispatcher'
+    #     codeZip = codeLoader.getCoreCode(codeFolder)
+    #     lambdaRoleDescription = "Compliance Dispatcher Lambda Role"
+    #     lambdaRoleName = cfgCore.coreResourceName('ComplianceDispatcher-LambdaRole')
+    #     functionName = cfgCore.coreFunctionName(codeFolder)
+    #     functionDescription = 'Compliance Dispatcher Lambda'
+    #     functionCfg = cfgCore.dispatchFunctionCfg()
 
-        landingZoneDiscovery = LandingZoneDiscovery(profile)
-        landingZoneConfig = landingZoneDiscovery.discoverLandingZone()
-        if landingZoneConfig:
-            orgDesc = landingZoneDiscovery.getOrganizationDescriptor()
-        else:
-            orgDesc = None
+    #     landingZoneDiscovery = LandingZoneDiscovery(profile)
+    #     landingZoneConfig = landingZoneDiscovery.discoverLandingZone()
+    #     if landingZoneConfig:
+    #         orgDesc = landingZoneDiscovery.getOrganizationDescriptor()
+    #     else:
+    #         orgDesc = None
 
-        ebc.declareEventBusArn(eventBusName, tagsCore)
-        ruleArn = ebc.declareEventBusRuleArn(eventBusName, ruleName, ruleDescription, eventPattern, tagsCore)
+    #     ebc.declareEventBusArn(eventBusName, tagsCore)
+    #     ruleArn = ebc.declareEventBusRuleArn(eventBusName, ruleName, ruleDescription, eventPattern, tagsCore)
 
-        cmkStatements = [ policy.allowCMKForServiceProducer(profile, policy.serviceNamespaceSQS(), policy.principalEventBridge()) ]
-        cmkarn = kmsc.declareCMKArn(sqsCmkDescription, sqsCmkAlias, cmkStatements, tagsCore)
-        sqsStatements = [ policy.allowSQSForServiceProducer(profile, queueName, policy.principalEventBridge(), ruleArn) ]
-        sqsArn = sqsc.declareQueueArn(queueName, cmkarn, sqsStatements, sqsVisibilityTimeoutSecs, tagsCore)
-        ebc.declareEventBusTarget(eventBusName, ruleName, queueName, sqsArn, ebTargetMaxAgeSecs)
-        if orgDesc:
-            ebc.declareEventBusPublishPermissionForOrganization(eventBusName, orgDesc.id)
-        else:
-            ebc.declareEventBusPublishPermissionForAccount(eventBusName, profile.accountId)
-        lambdaPolicyArn = iamc.declareAwsPolicyArn(policy.awsLambdaBasicExecution())
-        roleArn = iamc.declareRoleArn(lambdaRoleName, lambdaRoleDescription, policy.trustLambda(), tagsCore)
-        iamc.declareManagedPoliciesForRole(lambdaRoleName, [lambdaPolicyArn])
-        policyMapSQS = policy.permissions([policy.allowConsumeSQS(sqsArn), policy.allowDecryptCMK(cmkarn)])
-        remediationLambdaNamePattern = "function:{}".format(cfgCore.ruleFunctionName("*"))
-        remediationLambdaArn = profile.getRegionAccountArn('lambda', remediationLambdaNamePattern)
-        policyMapInvoke = policy.permissions([policy.allowInvokeLambda(remediationLambdaArn)])
-        policyMapOps = policy.permissions([policy.allowPutCloudWatchMetricData()])
-        inlinePolicyMap = {"ConsumeQueue": policyMapSQS, "InvokeRemediations": policyMapInvoke, "Operations": policyMapOps}
-        if orgDesc:
-            lzStatements = [policy.allowDescribeIam("*"), policy.allowDescribeAccount(orgDesc.masterAccountId, orgDesc.id)]
-            inlinePolicyMap['LandingZone'] = policy.permissions(lzStatements)
-        iamc.declareInlinePoliciesForRole(lambdaRoleName, inlinePolicyMap)
-        lambdaArn = lambdac.declareFunctionArn(functionName, functionDescription, roleArn, functionCfg, codeZip, tagsCore)
-        lambdac.declareEventSourceMappingUUID(functionName, sqsArn, sqsPollCfg)
+    #     cmkStatements = [ policy.allowCMKForServiceProducer(profile, policy.serviceNamespaceSQS(), policy.principalEventBridge()) ]
+    #     cmkarn = kmsc.declareCMKArn(sqsCmkDescription, sqsCmkAlias, cmkStatements, tagsCore)
+    #     sqsStatements = [ policy.allowSQSForServiceProducer(profile, queueName, policy.principalEventBridge(), ruleArn) ]
+    #     sqsArn = sqsc.declareQueueArn(queueName, cmkarn, sqsStatements, sqsVisibilityTimeoutSecs, tagsCore)
+    #     ebc.declareEventBusTarget(eventBusName, ruleName, queueName, sqsArn, ebTargetMaxAgeSecs)
+    #     if orgDesc:
+    #         ebc.declareEventBusPublishPermissionForOrganization(eventBusName, orgDesc.id)
+    #     else:
+    #         ebc.declareEventBusPublishPermissionForAccount(eventBusName, profile.accountId)
+    #     lambdaPolicyArn = iamc.declareAwsPolicyArn(policy.awsPolicyLambdaBasicExecution())
+    #     roleArn = iamc.declareRoleArn(lambdaRoleName, lambdaRoleDescription, policy.trustLambda(), tagsCore)
+    #     iamc.declareManagedPoliciesForRole(lambdaRoleName, [lambdaPolicyArn])
+    #     policyMapSQS = policy.permissions([policy.allowConsumeSQS(sqsArn), policy.allowDecryptCMK(cmkarn)])
+    #     remediationLambdaNamePattern = "function:{}".format(cfgCore.ruleFunctionName("*"))
+    #     remediationLambdaArn = profile.getRegionAccountArn('lambda', remediationLambdaNamePattern)
+    #     policyMapInvoke = policy.permissions([policy.allowInvokeLambda(remediationLambdaArn)])
+    #     policyMapOps = policy.permissions([policy.allowPutCloudWatchMetricData()])
+    #     inlinePolicyMap = {"ConsumeQueue": policyMapSQS, "InvokeRemediations": policyMapInvoke, "Operations": policyMapOps}
+    #     if orgDesc:
+    #         lzStatements = [policy.allowDescribeIam("*"), policy.allowDescribeAccount(orgDesc.masterAccountId, orgDesc.id)]
+    #         inlinePolicyMap['LandingZone'] = policy.permissions(lzStatements)
+    #     iamc.declareInlinePoliciesForRole(lambdaRoleName, inlinePolicyMap)
+    #     lambdaArn = lambdac.declareFunctionArn(functionName, functionDescription, roleArn, functionCfg, codeZip, tagsCore)
+    #     lambdac.declareEventSourceMappingUUID(functionName, sqsArn, sqsPollCfg)
 
-        ruleFolders = codeLoader.getAvailableRules()
-        self.assertIsNotNone(landingZoneConfig) # Add support for single accounts
-        ruleRoleArn = landingZoneConfig['AuditRoleArn']
-        for ruleFolder in ruleFolders:
-            rZip = codeLoader.getRuleCode(ruleFolder)
-            rFunctionName = cfgCore.ruleFunctionName(ruleFolder)
-            rFunctionDescription = '{} Auto Remediation Lambda'.format(ruleFolder)
-            rFunctionCfg = cfgCore.ruleFunctionCfg(ruleFolder)
-            rLambdaArn = lambdac.declareFunctionArn(rFunctionName, rFunctionDescription, ruleRoleArn, rFunctionCfg, rZip, tagsRule)
+    #     ruleFolders = codeLoader.getAvailableRules()
+    #     self.assertIsNotNone(landingZoneConfig) # Add support for single accounts
+    #     ruleRoleArn = landingZoneConfig['AuditRoleArn']
+    #     for ruleFolder in ruleFolders:
+    #         rZip = codeLoader.getRuleCode(ruleFolder)
+    #         rFunctionName = cfgCore.ruleFunctionName(ruleFolder)
+    #         rFunctionDescription = '{} Auto Remediation Lambda'.format(ruleFolder)
+    #         rFunctionCfg = cfgCore.ruleFunctionCfg(ruleFolder)
+    #         rLambdaArn = lambdac.declareFunctionArn(rFunctionName, rFunctionDescription, ruleRoleArn, rFunctionCfg, rZip, tagsRule)
 
-        print("Done")
+    #     print("Done")
 
-        for ruleFolder in ruleFolders:
-            rFunctionName = cfgCore.ruleFunctionName(ruleFolder)
-            lambdac.removeFunction(rFunctionName)
-        lambdac.removeEventSourceMapping(functionName, sqsArn)
-        lambdac.removeFunction(functionName)
-        iamc.removeRole(lambdaRoleName)
-        sqsc.removeQueue(queueName)
-        ebc.removeEventBus(eventBusName)
+    #     for ruleFolder in ruleFolders:
+    #         rFunctionName = cfgCore.ruleFunctionName(ruleFolder)
+    #         lambdac.removeFunction(rFunctionName)
+    #     lambdac.removeEventSourceMapping(functionName, sqsArn)
+    #     lambdac.removeFunction(functionName)
+    #     iamc.removeRole(lambdaRoleName)
+    #     sqsc.removeQueue(queueName)
+    #     ebc.removeEventBus(eventBusName)
 
 
     def test_stack_local(self):
@@ -384,27 +383,28 @@ class TestRdq(unittest.TestCase):
         templateMap = cfn.Template(stackSetDescription, resourceMap)
         profile = Profile()
         cfnc = CfnClient(profile)
-        cfnc.removeStackSet(stackSetName, orgIds, regions)
+        cfnc.removeStackSet(stackSetName)
         ss0 = cfnc.declareStackSet(stackSetName, templateMap, stackSetDescription, tagsCore, orgIds, regions)
-        self.assertTrue(len(ss0) == 2)
+        self.assertIsNotNone(ss0.operationId)
         ss1 = cfnc.declareStackSet(stackSetName, templateMap, stackSetDescription, tagsCore, orgIds, regions)
-        self.assertTrue(len(ss1) == 2)
-        self.assertIsNone(ss1['OperationId'])
+        self.assertIsNone(ss1.operationId)
         ss2 = cfnc.declareStackSet(stackSetName, templateMap, (stackSetDescription + ".1"), tagsCore, orgIds, regions)
-        self.assertTrue(len(ss2) == 2)
-        op2 = ss2['OperationId']
+        self.assertIsNotNone(ss2.operationId)
+        op2 = ss2.operationId
         summary2 = cfnc.getStackSetOperation(stackSetName, op2)
-        self.assertTrue(len(summary2) > 0)
+        self.assertIsNotNone(summary2.status)
         cfnc.isRunningStackSetOperations(stackSetName)
         print("Done")
-        cfnc.removeStackSet(stackSetName, orgIds, regions)
+        for sx in cfnc.listStackInstances(stackSetName):
+            print("{}:{} - {}".format(sx.account, sx.stackInstanceStatus, sx))
+        cfnc.removeStackSet(stackSetName)
 
 
 
 if __name__ == '__main__':
     initLogging(None, 'INFO')
     loader = unittest.TestLoader()
-    loader.testMethodPrefix = "test_dispatcher"
+    loader.testMethodPrefix = "test_stackset"
     unittest.main(warnings='default', testLoader = loader)
     # setup_assume_role('746869318262')
     # test_assume_role('119399605612')

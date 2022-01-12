@@ -58,7 +58,7 @@ def setup_targetAccount():
     roleDescription = 'Role for executing unit tests from {}'.format(trustAccountId)
     trustPolicy = policy.trustAccount(trustAccountId)
     roleArn = iam.declareRoleArn(roleName, roleDescription, trustPolicy)
-    adminPolicy = iam.declareAwsPolicyArn('AdministratorAccess', '/')
+    adminPolicy = iam.declareAwsPolicyArn(policy.awsPolicyAdministratorAccess())
     iam.declareManagedPoliciesForRole(roleName, [adminPolicy])
     print("Declared role {}".format(roleArn))
     print("Account {} can be used as target for {}".format(profile.accountId, trustAccountId))

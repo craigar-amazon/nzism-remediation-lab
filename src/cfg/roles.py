@@ -1,7 +1,3 @@
-
-
-# Specify empty array for standalone mode
-# Specifying multiple members will initiate iam:GetRole discovery
 def landingZoneSearch():
     return ['ControlTower', 'AutomatedLandingZone']
 
@@ -15,4 +11,10 @@ def landingZoneRoles():
             'Audit': 'AWSLandingZoneSecurityAdministratorRole',
             'Remediation': 'AWSLandingZoneAdminExecutionRole'
         }
+    }
+
+def standaloneRoles():
+    return {
+        'Audit': 'autoremediation-local-AuditAdministratorRole',
+        'Remediation': 'autoremediation-local-AdministratorExecutionRole'
     }

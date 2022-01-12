@@ -1,10 +1,10 @@
-import logging
-import json
-import time
+import os, logging, json, time
 from typing import List
 
 import cfg.core as cfgCore
+import cfg.roles as cfgRoles
 
+from lib.base import ConfigError
 import lib.base.ruleresponse as rr
 
 from lib.rdq import Profile
@@ -14,6 +14,21 @@ from lib.rdq.svccwm import CwmClient
 from lib.lambdas.core import has_expected_attribute, get_attribute
 from lib.lambdas.core.parser import Parser, RuleInvocation
 import lib.lambdas.core.cwdims as cwdims
+
+
+def _get_remediation_role():
+    envName = cfgCore.environmentVariableNameRemediationRole()
+    roleName = os.environ.get(envName)
+    if roleName: return roleName
+    msg = "Required environment variable `{}` is undefined".format(envName)
+    raise ConfigError(msg)
+
+def _is_standalone_mode(roleName):
+    standaloneRoles = cfgRoles.standaloneRoles()
+    if not standaloneRoles: return False
+    optStandaloneRemediation = standaloneRoles.get('Remediation')
+    if not optStandaloneRemediation: return False
+    return roleName == optStandaloneRemediation
 
 
 class RuleOutcome:
@@ -26,7 +41,9 @@ class Dispatcher:
         self._profile = profile
         self._cwmclient = CwmClient(profile)
         self._lambdaclient = LambdaClient(profile)
-        self._parser = Parser(profile)
+        remediationRoleName = _get_remediation_role()
+        isStandaloneMode = _is_standalone_mode(remediationRoleName)
+        self._parser = Parser(profile, remediationRoleName, isStandaloneMode)
         self._retrySleepSecs = retrySleepSecs
 
     def get_base_config_rule_name(self, id, qval):

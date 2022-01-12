@@ -1,4 +1,5 @@
 import json
+from typing import Dict, List
 import botocore
 from lib.rdq import RdqError
 from lib.rdq.base import ServiceUtils
@@ -64,6 +65,84 @@ class OrganizationDescriptor:
     def __str__(self):
         return json.dumps(self._props)
 
+class OrganizationUnit:
+    def __init__(self, props):
+        self._props = props
+
+    @property
+    def id(self):
+        return self._props['Id']
+
+    @property
+    def arn(self):
+        return self._props['Arn']
+
+    @property
+    def name(self):
+        return self._props['Name']
+
+    def toDict(self) -> dict:
+        return self._props
+
+    def __str__(self):
+        return json.dumps(self._props)
+
+class OrganizationUnitTree:
+    def __init__(self, parentOU: OrganizationUnit):
+        self._parentOU = parentOU
+        self._idMap: Dict[str, OrganizationUnitTree] = {}
+
+    @property
+    def id(self): return self._parentOU.id
+
+    def putChildTree(self, childTree):
+        childId = childTree.id
+        self._idMap[childId] = childTree
+
+    def findOUById(self, id: str) -> OrganizationUnit:
+        if self._parentOU.id == id: return self._parentOU
+        for childTree in self._idMap.values():
+            matchOU = childTree.findOUById(id)
+            if matchOU: return matchOU
+        return None
+
+    def findOUByPath(self, targetPath: str, head=None) -> OrganizationUnit:
+        prefix = "" if head is None else head + "/"
+        actualPath = prefix + self._parentOU.name
+        if actualPath == targetPath: return self._parentOU
+        for childTree in self._idMap.values():
+            matchOU = childTree.findOUByPath(targetPath, actualPath)
+            if matchOU: return matchOU
+        return None
+
+    def matchOUByName(self, name: str) -> List[OrganizationUnit]:
+        result = []
+        if self._parentOU.name == name:
+            result.append(self._parentOU)
+        for childTree in self._idMap.values():
+            result.extend(childTree.matchOUByName(name))
+        return result
+
+    def toDict(self):
+        childOUs = []
+        for childTree in self._idMap.values:
+            childOUs.append(childTree.toDict())
+        return {'parentOU': self._parentOU, 'childOUs': childOUs}
+
+    def _fmt(self, level, indentChar, nodeMark):
+        buff = []
+        indent = "" if level < 2 else ''.ljust((level - 1) * len(nodeMark), indentChar)
+        prefix = "" if level < 1 else nodeMark
+        line = "{}{}{} ({})".format(indent, prefix, self._parentOU.name, self._parentOU.id)
+        buff.append(line)
+        for childTree in self._idMap.values():
+            buff.extend(childTree._fmt((level + 1), indentChar, nodeMark))
+        return buff
+
+    def pretty(self, indentChar=' ', nodeMark="+---"):
+        buff = self._fmt(0, indentChar, nodeMark)
+        return '\n'.join(buff)
+
 
 class OrganizationClient:
     def __init__(self, profile):
@@ -97,6 +176,52 @@ class OrganizationClient:
         except botocore.exceptions.ClientError as e:
             self.diagnosticDelegated(op)
             raise RdqError(self._utils.fail(e, op))
+
+    def get_root_ou(self) -> OrganizationUnit:
+        op = "list_roots"
+        try:
+            paginator = self._client.get_paginator(op)
+            page_iterator = paginator.paginate()
+            results = []
+            for page in page_iterator:
+                items = page["Roots"]
+                for item in items:
+                    results.append(OrganizationUnit(item))
+            resultCount = len(results)
+            if resultCount == 1: return results[0]
+            raise RdqError(self._utils.integrity("Unexpected result count", "ResultCount", resultCount))
+        except botocore.exceptions.ClientError as e:
+            raise RdqError(self._utils.fail(e, op))
+
+    def list_ous_for_parent(self, parentId) -> List[OrganizationUnit]:
+        op = "list_organizational_units_for_parent"
+        try:
+            paginator = self._client.get_paginator(op)
+            page_iterator = paginator.paginate(ParentId=parentId)
+            ouList = []
+            for page in page_iterator:
+                items = page["OrganizationalUnits"]
+                for item in items:
+                    ouList.append(OrganizationUnit(item))
+            return ouList
+        except botocore.exceptions.ClientError as e:
+            if self._utils.is_resource_not_found(e): return []
+            raise RdqError(self._utils.fail(e, op, 'ParentId', parentId))
+
+    def make_ou_tree(self, parentOU: OrganizationUnit, depth, tracker):
+        tree = OrganizationUnitTree(parentOU)
+        if tracker:
+            tracker(depth, parentOU.name)
+        childOUList = self.list_ous_for_parent(parentOU.id)
+        for childOU in childOUList:
+            childTree = self.make_ou_tree(childOU, (depth+1), tracker)
+            tree.putChildTree(childTree)
+        return tree
+
+    def getOrganizationUnitTree(self, tracker=None) -> OrganizationUnitTree:
+        rootOU = self.get_root_ou()
+        tree = self.make_ou_tree(rootOU, 0, tracker)
+        return tree
 
     def getOrganizationDescriptor(self) -> OrganizationDescriptor:
         return OrganizationDescriptor(self.describe_organization())

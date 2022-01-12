@@ -1,4 +1,5 @@
-import botocore
+from typing import List
+import botocore, json
 
 from lib.base import Tags, DeltaBuild
 from lib.rdq import RdqError, RdqTimeout
@@ -17,6 +18,87 @@ def _contains(val, *args):
     for a in args:
         if val.find(a) > 0: return True
     return False
+
+class StackSetOperationRef:
+    def __init__(self, stackSetId, operationId):
+        self._stackSetId = stackSetId
+        self._operationId = operationId
+
+    @property
+    def stackSetId(self): return self._stackSetId
+
+    @property
+    def operationId(self): return self._operationId
+
+    def toDict(self) -> dict:
+        return {
+            'StackSetId': self.stackSetId,
+            'OperationId': self._operationId  
+        }
+
+    def __str__(self):
+        return json.dumps(self.toDict())
+
+
+class StackSetOperation:
+    def __init__(self, props):
+        self._props = props
+
+    @property
+    def stackSetId(self): return self._props['StackSetId']
+
+    @property
+    def operationId(self): return self._props['OperationId']
+
+    @property
+    def action(self): return self._props['Action']
+
+    @property
+    def status(self): return self._props['Status']
+
+    def toDict(self) -> dict:
+        return self._props
+
+    def __str__(self):
+        return json.dumps(self._props)
+
+
+class StackInstanceSummary:
+    def __init__(self, props):
+        self._props = props
+
+    @property
+    def stackSetId(self): return self._props['StackSetId']
+
+    @property
+    def region(self): return self._props['Region']
+
+    @property
+    def account(self): return self._props['Account']
+
+    @property
+    def stackId(self): return self._props['StackId']
+
+    @property
+    def status(self): return self._props['Status']
+
+    @property
+    def statusReason(self): return self._props['StatusReason']
+
+    @property
+    def stackInstanceStatus(self): return self._props['StackInstanceStatus']['DetailedStatus']
+
+    @property
+    def ouId(self): return self._props.get('OrganizationalUnitId')
+
+    @property
+    def driftStatus(self): return self._props['DriftStatus']
+
+    def toDict(self) -> dict:
+        return self._props
+
+    def __str__(self):
+        return json.dumps(self._props)
 
 
 class CfnClient:
@@ -58,7 +140,7 @@ class CfnClient:
             if self._utils.is_resource_not_found(e): return None
             raise RdqError(self._utils.fail(e, op, 'StackSetName', stackSetName, 'CallAs', callAs))
 
-    def describe_stackset_operation(self, stackSetName, callAs, operationId):
+    def describe_stackset_operation(self, stackSetName, callAs, operationId) -> StackSetOperation:
         op = 'describe_stack_set_operation'
         try:
             response = self._client.describe_stack_set_operation(
@@ -66,7 +148,7 @@ class CfnClient:
                 OperationId=operationId,
                 CallAs=callAs
             )
-            return response['StackSetOperation']
+            return StackSetOperation(response['StackSetOperation'])
         except botocore.exceptions.ClientError as e:
             if self._utils.is_resource_not_found(e): return None
             raise RdqError(self._utils.fail(e, op, 'StackSetName', stackSetName, 'CallAs', callAs, 'OperationId', operationId))
@@ -81,6 +163,21 @@ class CfnClient:
                 items = page["Summaries"]
                 for item in items:
                     results.append(item)
+            return results
+        except botocore.exceptions.ClientError as e:
+            if self._utils.is_resource_not_found(e): return []
+            raise RdqError(self._utils.fail(e, op, 'StackSetName', stackSetName, 'CallAs', callAs))
+
+    def list_stack_instances(self, stackSetName, callAs) -> List[StackInstanceSummary]:
+        op = "list_stack_instances"
+        try:
+            paginator = self._client.get_paginator(op)
+            page_iterator = paginator.paginate(StackSetName=stackSetName, CallAs=callAs)
+            results = []
+            for page in page_iterator:
+                items = page["Summaries"]
+                for item in items:
+                    results.append(StackInstanceSummary(item))
             return results
         except botocore.exceptions.ClientError as e:
             if self._utils.is_resource_not_found(e): return []
@@ -231,17 +328,21 @@ class CfnClient:
                     continue
                 raise RdqError(self._utils.fail(e, op, 'StackSetName', stackSetName, 'CallAs', callAs, 'OrgUnitIds', orgunitids))
 
-    def delete_stack_instances(self, stackSetName, callAs, orgunitids, regions):
+    def delete_stack_instances(self, stackSetName, callAs, ouSet, accountSet, regionSet):
         op = 'delete_stack_instances'
         operationId = self._utils.new_operation_id()
+        regions = list(regionSet)
+        deploymentTargets = {}
+        if len(ouSet) > 0:
+            deploymentTargets['OrganizationalUnitIds'] = list(ouSet)
+        else:
+            deploymentTargets['Accounts'] = list(accountSet)
         tracker = self._utils.init_tracker(op, operationId)
         while True:
             try:
                 self._client.delete_stack_instances(
                     StackSetName=stackSetName,
-                    DeploymentTargets={
-                        'OrganizationalUnitIds': orgunitids
-                    },
+                    DeploymentTargets=deploymentTargets,
                     Regions=regions,
                     RetainStacks = False,
                     OperationId = operationId,
@@ -332,7 +433,7 @@ class CfnClient:
         return self.get_completed_stack(stackName, maxSecs)
 
 
-    def declareStackSet(self, stackSetName, templateMap, description, tags, orgunitids, regions, forOrganization=True):
+    def declareStackSet(self, stackSetName, templateMap, description, tags, orgunitids, regions, forOrganization=True) -> StackSetOperationRef:
         callAs = _callAs(forOrganization)
         db = DeltaBuild()
         db.putRequired('Description', description)
@@ -364,22 +465,36 @@ class CfnClient:
             stacksetId = self.create_stackset_id(stackSetName, callAs, rq, tags)
             self.wait_on_running_stack_set_operations(stackSetName, callAs, 600)
             operationId = self.create_stack_instances(stackSetName, callAs, orgunitids, regions)
-        return {
-            'StackSetId': stacksetId,
-            'OperationId': operationId
-        }
+        return StackSetOperationRef(stacksetId, operationId)
 
-    def removeStackSet(self, stackSetName, orgunitids, regions, forOrganization=True):
+    def removeStackSet(self, stackSetName, forOrganization=True):
         callAs = _callAs(forOrganization)
-        operationId = self.delete_stack_instances(stackSetName, callAs, orgunitids, regions)
-        self.is_running_stack_set_operations(stackSetName, callAs, 600)
+        ouSet = set()
+        accountSet = set()
+        regionSet = set()
+        stackInstances = self.list_stack_instances(stackSetName, callAs)
+        for stackInstance in stackInstances:
+            regionSet.add(stackInstance.region)
+            if stackInstance.ouId:
+                ouSet.add(stackInstance.ouId)
+            else:
+                accountSet.add(stackInstance.account)
+        operationId = None
+        if len(regionSet) > 0 and (len(ouSet) > 0 or len(accountSet) > 0):
+            operationId = self.delete_stack_instances(stackSetName, callAs, ouSet, accountSet, regionSet)
+            self.is_running_stack_set_operations(stackSetName, callAs, 600)
         self.delete_stackset(stackSetName, callAs)
         return operationId
 
-    def getStackSetOperation(self, stackSetName, operationId, forOrganization=True):
+    def getStackSetOperation(self, stackSetName, operationId, forOrganization=True) -> StackSetOperation:
         callAs = _callAs(forOrganization)
         return self.describe_stackset_operation(stackSetName, callAs, operationId)
+
+    def listStackInstances(self, stackSetName, forOrganization=True) -> List[StackInstanceSummary]:
+        callAs = _callAs(forOrganization)
+        return self.list_stack_instances(stackSetName, callAs)
 
     def isRunningStackSetOperations(self, stackSetName, maxSecs=300, forOrganization=True):
         callAs = _callAs(forOrganization)
         return self.is_running_stack_set_operations(stackSetName, callAs, maxSecs)
+
