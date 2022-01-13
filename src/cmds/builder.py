@@ -118,7 +118,6 @@ def organizationState(clients: Clients, base: BaseState) -> OrganizationState:
     tracker = lambda depth, ouName: print(''.ljust(depth, '.')+ouName)
     ouTree = clients.org.getOrganizationUnitTree(tracker)
     print("...Done")
-    print(ouTree.pretty())
     orgId = descriptor.id
     cfgOUsInScope = get_list(cfg.org.organizationUnitsInScope(orgId), 'cfg.org.organizationUnitsInScope')
     cfgRegionsInScope = get_list(cfg.org.regionsInScope(orgId), 'cfg.org.regionsInScopeInScope')
@@ -145,6 +144,7 @@ def organizationState(clients: Clients, base: BaseState) -> OrganizationState:
         else:
             msg = "OU `{}` is not defined for Organization {}".format(oukey, orgId)
         raise ConfigError(msg)
+    print(ouTree.pretty(highlightIds=ouScopeList, caption="<<--Compliance Forwarding"))
     return OrganizationState(descriptor, ouScopeList, cfgRegionsInScope)
 
 class LandingZoneState:

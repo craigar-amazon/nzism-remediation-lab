@@ -129,18 +129,22 @@ class OrganizationUnitTree:
             childOUs.append(childTree.toDict())
         return {'parentOU': self._parentOU, 'childOUs': childOUs}
 
-    def _fmt(self, level, indentChar, nodeMark):
+    def _fmt(self, level, indentChar, nodeMark, idSet: set, caption):
         buff = []
         indent = "" if level < 2 else ''.ljust((level - 1) * len(nodeMark), indentChar)
         prefix = "" if level < 1 else nodeMark
-        line = "{}{}{} ({})".format(indent, prefix, self._parentOU.name, self._parentOU.id)
+        ouName = self._parentOU.name
+        ouId = self._parentOU.id
+        highlight = caption if (ouId in idSet) else ""
+        line = "{}{}{} ({}){}".format(indent, prefix, ouName, ouId, highlight)
         buff.append(line)
         for childTree in self._idMap.values():
-            buff.extend(childTree._fmt((level + 1), indentChar, nodeMark))
+            buff.extend(childTree._fmt((level + 1), indentChar, nodeMark, idSet, caption))
         return buff
 
-    def pretty(self, indentChar=' ', nodeMark="+---"):
-        buff = self._fmt(0, indentChar, nodeMark)
+    def pretty(self, indentChar=' ', nodeMark="+---", highlightIds=[], caption=""):
+        idSet = set(highlightIds)
+        buff = self._fmt(0, indentChar, nodeMark, idSet, caption)
         return '\n'.join(buff)
 
 
