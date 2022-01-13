@@ -77,22 +77,25 @@ class StackInstanceSummary:
     def account(self): return self._props['Account']
 
     @property
-    def stackId(self): return self._props['StackId']
+    def stackId(self): return self._props.get('StackId')
 
     @property
-    def status(self): return self._props['Status']
+    def status(self): return self._props.get('Status')
 
     @property
-    def statusReason(self): return self._props['StatusReason']
+    def statusReason(self): return self._props.get('StatusReason')
 
     @property
-    def stackInstanceStatus(self): return self._props['StackInstanceStatus']['DetailedStatus']
+    def stackInstanceStatus(self):
+        siStatus = self._props.get('StackInstanceStatus')
+        if not siStatus: return None
+        return siStatus.get('DetailedStatus')
 
     @property
     def ouId(self): return self._props.get('OrganizationalUnitId')
 
     @property
-    def driftStatus(self): return self._props['DriftStatus']
+    def driftStatus(self): return self._props.get('DriftStatus')
 
     def toDict(self) -> dict:
         return self._props
@@ -354,13 +357,15 @@ class CfnClient:
                 if self._utils.retry_operation_in_progress(e, tracker):
                     tracker = self._utils.backoff(tracker)
                     continue
-                raise RdqError(self._utils.fail(e, op, 'StackSetName', stackSetName, 'CallAs', callAs, 'OrgUnitIds', orgunitids))
+                raise RdqError(self._utils.fail(e, op, 'StackSetName', stackSetName, 'CallAs', callAs, 'OrgUnitIds', ouSet))
 
     def get_completed_stack(self, stackName, maxSecs):
         op = 'AwaitStackCompletion'
         tracker = self._utils.init_tracker(op, maxSecs=maxSecs, policy="ElapsedOnly")
         while True:
             stack = self.describe_stack(stackName)
+            if not stack:
+                return None
             status = stack['StackStatus']
             if not _contains(status, '_IN_PROGRESS'):
                 return stack

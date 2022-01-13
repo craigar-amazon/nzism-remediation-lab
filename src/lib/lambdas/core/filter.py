@@ -1,4 +1,4 @@
-import regex
+import re
 import cfg.rules as cfgRule
 
 def _canonIncluded(included) -> list:
@@ -19,13 +19,13 @@ def acceptResourceId(configRuleName, action, accountName, resourceId) -> bool:
     exList = _canonExcluded(excluded)
     matchIn = False
     for inPattern in inList:
-        if regex.fullmatch(inPattern, resourceId):
+        if re.fullmatch(inPattern, resourceId):
             matchIn = True
             break
     if not matchIn: return False
     matchEx = False
     for exPattern in exList:
-        if regex.fullmatch(exPattern, resourceId):
+        if re.fullmatch(exPattern, resourceId):
             matchEx = True
             break
     if matchEx: return False

@@ -110,14 +110,15 @@ class OrganizationState:
         self.ouList = ouList
         self.regionList = regionList
 
-class LandingZoneState:
-    def __init__(self, auditRoleArn, remediationRoleName, optOrganizationState: OrganizationState):
-        self.auditRoleArn = auditRoleArn
-        self.remediationRoleName = remediationRoleName
-        self.optOrganizationState = optOrganizationState
-
-
-def declareOrganizationState(base: BaseState, descriptor: OrganizationDescriptor, ouTree: OrganizationUnitTree) -> OrganizationState:
+def organizationState(clients: Clients, base: BaseState) -> OrganizationState:
+    if base.args.forcelocal: return None
+    descriptor = clients.org.getOrganizationDescriptor()
+    print("Detected Organization ARN: {}".format(descriptor.arn))
+    print("Enumerating OUs...")
+    tracker = lambda depth, ouName: print(''.ljust(depth, '.')+ouName)
+    ouTree = clients.org.getOrganizationUnitTree(tracker)
+    print("...Done")
+    print(ouTree.pretty())
     orgId = descriptor.id
     cfgOUsInScope = get_list(cfg.org.organizationUnitsInScope(orgId), 'cfg.org.organizationUnitsInScope')
     cfgRegionsInScope = get_list(cfg.org.regionsInScope(orgId), 'cfg.org.regionsInScopeInScope')
@@ -128,16 +129,16 @@ def declareOrganizationState(base: BaseState, descriptor: OrganizationDescriptor
     for oukey in ousInScope:
         ouMatch = ouTree.findOUById(oukey)
         if ouMatch:
-            ouScopeList.append(ouMatch)
+            ouScopeList.append(ouMatch.id)
             continue
         ouMatch = ouTree.findOUByPath(oukey)
         if ouMatch:
-            ouScopeList.append(ouMatch)
+            ouScopeList.append(ouMatch.id)
             continue
         ouMatchList = ouTree.matchOUByName(oukey)
         matchCount = len(ouMatchList)
         if matchCount == 1:
-            ouScopeList.append(ouMatchList[0])
+            ouScopeList.append(ouMatchList[0].id)
             continue
         if matchCount > 1:
             msg = "The OU name `{}` is used {} times in Organization {}; please specify the full OU path".format(oukey, matchCount, orgId)
@@ -146,28 +147,25 @@ def declareOrganizationState(base: BaseState, descriptor: OrganizationDescriptor
         raise ConfigError(msg)
     return OrganizationState(descriptor, ouScopeList, cfgRegionsInScope)
 
+class LandingZoneState:
+    def __init__(self, auditRoleArn, remediationRoleName):
+        self.auditRoleArn = auditRoleArn
+        self.remediationRoleName = remediationRoleName
 
 def landingZoneState(clients: Clients, base: BaseState) -> LandingZoneState:
-    landingZoneDiscovery = LandingZoneDiscovery(base.profile)
     if base.args.forcelocal:
         print("Local installation has been specified")
         forceLocalRole = localRoleState(clients, base)
-        return LandingZoneState(forceLocalRole.auditRoleArn, forceLocalRole.remediationRoleName, None)
+        return LandingZoneState(forceLocalRole.auditRoleArn, forceLocalRole.remediationRoleName)
+    landingZoneDiscovery = LandingZoneDiscovery(base.profile)
     optLZDescriptor: LandingZoneDescriptor = landingZoneDiscovery.getLandingZoneDescriptor()
     if not optLZDescriptor:
         print("Landing zone is not configured. Will install locally.")
         requiredLocalRole = localRoleState(clients, base)
-        return LandingZoneState(requiredLocalRole.auditRoleArn, requiredLocalRole.remediationRoleName, None)
+        return LandingZoneState(requiredLocalRole.auditRoleArn, requiredLocalRole.remediationRoleName)
     print('Detected {}'.format(optLZDescriptor.landingZoneType))
-    organizationDescriptor = clients.org.getOrganizationDescriptor()
-    print("Detected Organization ARN: {}".format(organizationDescriptor.arn))
-    print("Enumerating OUs...")
-    tracker = lambda depth, ouName: print(''.ljust(depth, '.')+ouName)
-    ouTree = clients.org.getOrganizationUnitTree(tracker)
-    print("...Done")
-    print(ouTree.pretty())
-    organizationState = declareOrganizationState(base, organizationDescriptor, ouTree)
-    return LandingZoneState(optLZDescriptor.auditRoleArn, optLZDescriptor.remediationRoleName, organizationState)
+    return LandingZoneState(optLZDescriptor.auditRoleArn, optLZDescriptor.remediationRoleName)
+
 
 class EventBusState:
     def __init__(self, eventBusArn, ruleArn):
@@ -175,6 +173,8 @@ class EventBusState:
         self.complianceChangeRuleArn = ruleArn
 
 def eventBusState(clients :Clients, base :BaseState) -> EventBusState:
+    busName = base.eventBusName
+    ruleName = base.complianceRuleName
     eventBusArn = clients.eb.declareEventBusArn(base.eventBusName, base.tagsCore)
     print("EventBus ARN: {}".format(eventBusArn))
     ruleDesc= "Config Rule Compliance Change"
@@ -182,15 +182,13 @@ def eventBusState(clients :Clients, base :BaseState) -> EventBusState:
         'source': ["aws.config"],
         'detail-type': ["Config Rules Compliance Change"]
     }
-    ruleArn = clients.eb.declareEventBusRuleArn(
-        base.eventBusName, base.complianceRuleName, ruleDesc, eventPattern, base.tagsCore
-    )
+    ruleArn = clients.eb.declareEventBusRuleArn(busName, ruleName, ruleDesc, eventPattern, base.tagsCore)
     return EventBusState(eventBusArn, ruleArn)
 
 def eventBusRemove(clients : Clients, base: BaseState):
-    eventBusName = base.eventBusName
-    clients.eb.removeEventBus(eventBusName)
-    print("Removed {}".format(eventBusName))
+    busName = base.eventBusName
+    clients.eb.removeEventBus(busName)
+    print("Removed {}".format(busName))
 
 class EventQueueState:
     def __init__(self, queueArn, cmkArn):
@@ -223,15 +221,15 @@ def eventQueueRemove(clients : Clients, base: BaseState):
         print("Scheduled removal of {}".format(alias))
 
 def eventQueueTarget(clients :Clients, base :BaseState, eventQueue :EventQueueState):
+    busName = base.eventBusName
+    ruleName = base.complianceRuleName
+    queueName = base.queueName
     maxAgeSecs = getCoreEventBusCfgValue('RuleTargetMaxAgeSecs')
-    clients.eb.declareEventBusTarget(
-        base.eventBusName, base.complianceRuleName, base.queueName, eventQueue.queueArn, maxAgeSecs
-    )
+    clients.eb.declareEventBusTarget(busName, ruleName, queueName, eventQueue.queueArn, maxAgeSecs)
 
-def eventBusPermission(clients :Clients, base :BaseState, landingZone :LandingZoneState):
-    organizationState = landingZone.optOrganizationState
-    if organizationState:
-        organizationId = organizationState.descriptor.id
+def eventBusPermission(clients :Clients, base :BaseState, optOrganization :OrganizationState):
+    if optOrganization:
+        organizationId = optOrganization.descriptor.id
         clients.eb.declareEventBusPublishPermissionForOrganization(base.eventBusName, organizationId)
     else:
         clients.eb.declareEventBusPublishPermissionForAccount(base.eventBusName, base.profile.accountId)
@@ -240,7 +238,7 @@ class DispatchLambdaRoleState:
     def __init__(self, roleArn):
         self.roleArn = roleArn
 
-def dispatchLambdaRoleState(clients :Clients, base :BaseState, queue :EventQueueState, landingZone :LandingZoneState) -> DispatchLambdaRoleState:
+def dispatchLambdaRoleState(clients :Clients, base :BaseState, queue :EventQueueState, optOrganization :OrganizationState) -> DispatchLambdaRoleState:
     lambdaPolicyArn = clients.iam.declareAwsPolicyArn(policy.awsPolicyLambdaBasicExecution())
     lambdaManagedPolicyArns = [lambdaPolicyArn]
     trustPolicy = policy.trustLambda()
@@ -251,9 +249,14 @@ def dispatchLambdaRoleState(clients :Clients, base :BaseState, queue :EventQueue
     ruleLambdaNamePattern = "function:{}".format(cfg.core.ruleFunctionName("*"))
     ruleLambdaArn = base.profile.getRegionAccountArn('lambda', ruleLambdaNamePattern)
     ruleInvokePolicy = policy.permissions([policy.allowInvokeLambda(ruleLambdaArn)])
-    opsPolicy = policy.permissions([policy.allowPutCloudWatchMetricData()])
+    opsActions = [policy.allowPutCloudWatchMetricData()]
+    if optOrganization:
+        orgDesc = optOrganization.descriptor
+        opsActions.append(policy.allowDescribeAccount(orgDesc.masterAccountId, orgDesc.id))
+    opsPolicy = policy.permissions(opsActions)
     inlinePolicyMap = {"ConsumeQueue": sqsPolicy, "InvokeRules": ruleInvokePolicy, "Operations": opsPolicy}
     clients.iam.declareInlinePoliciesForRole(base.dispatchLambdaRoleName, inlinePolicyMap)
+    print("Core Dispatch Lambda Role ARN: {}".format(roleArn))
     return DispatchLambdaRoleState(roleArn)
 
 def dispatchLambdaRoleRemove(clients :Clients, base :BaseState):
@@ -316,7 +319,7 @@ def ruleLambdaRemove(clients: Clients, base: BaseState):
         print("Removed {}".format(functionName))
 
 
-def complianceForwarderState(clients: Clients, base: BaseState, eventBus :EventBusState, landingZone :LandingZoneState):
+def complianceForwarderState(clients: Clients, base: BaseState, eventBus :EventBusState, optOrganization :OrganizationState):
     roleName = base.complianceForwarderRoleName
     roleDesc = "Allow config rule compliance chance events to be forwarded to central event bus"
     templateDesc = "Compliance Change Event Forwarder"
@@ -335,12 +338,12 @@ def complianceForwarderState(clients: Clients, base: BaseState, eventBus :EventB
     resourceMap[_rEventRule] = eb.rRule('default', ruleName, eventPattern, [ruleTarget])
     templateMap = cfn.Template(templateDesc, resourceMap)
     stackName = base.complianceForwarderStackName
-    optOrganizationState = landingZone.optOrganizationState
-    if optOrganizationState:
-        ouList = optOrganizationState.ouList
-        regionList = optOrganizationState.regionList
+    if optOrganization:
+        ouList = optOrganization.ouList
+        regionList = optOrganization.regionList
         operationRef = clients.cfn.declareStackSet(stackName, templateMap, templateDesc, base.tagsCore, ouList, regionList)
-        print("Compliance Forwarder Stack Set Id: {} (Operation: {})".format(operationRef.stackSetId, operationRef.operationId))
+        opInfo = "Operation: {}".format(operationRef.operationId) if operationRef.operationId else "No stack operations required"
+        print("Compliance Forwarder Stack Set Id: {} | {}".format(operationRef.stackSetId, opInfo))
     else:
         stackId = clients.cfn.declareStack(stackName, templateMap, base.tagsCore)
         print("Stack Id: {}".format(stackId))
@@ -352,31 +355,48 @@ def complianceForwarderRemove(clients: Clients, base: BaseState):
     clients.cfn.removeStackSet(stackName)
     print("Removed {}".format(stackName))
 
+def complianceForwarderView(clients: Clients, base: BaseState):
+    stackName = base.complianceForwarderStackName
+    siList = clients.cfn.listStackInstances(stackName)
+    for si in siList:
+        accountDesc = clients.org.getAccountDescriptor(si.account)
+        if accountDesc:
+            accountInfo = "{} - {} {} ({})".format(accountDesc.accountName, si.account, accountDesc.status, si.ouId)
+        else:
+            accountInfo = "{} ({})".format(si.account, si.ouId)
+        status = si.status if si.status else '-'
+        if si.statusReason:
+            status = status + " (" + si.statusReason + ")"
+        stackStatus = si.stackInstanceStatus if si.stackInstanceStatus else '-'
+        print("{} {} | Status: {} | Stack: {}".format(accountInfo, si.region, status, stackStatus))
+
+
 def init(args):
     profile = Profile()
     clients = Clients(args, profile)
     base = BaseState(args, profile)
     landingZone = landingZoneState(clients, base)
+    optOrganization = organizationState(clients, base)
     eventBus = eventBusState(clients, base)
     eventQueue = eventQueueState(clients, base, eventBus)
     eventQueueTarget(clients, base, eventQueue)
-    eventBusPermission(clients, base, landingZone)
-    dispatchLambdaRole = dispatchLambdaRoleState(clients, base, eventQueue, landingZone)
+    eventBusPermission(clients, base, optOrganization)
+    dispatchLambdaRole = dispatchLambdaRoleState(clients, base, eventQueue, optOrganization)
     dispatchLambda = dispatchLambdaState(clients, base, dispatchLambdaRole, landingZone)
     dispatchLambdaQueueConsumerState(clients, base, dispatchLambda, eventQueue)
     ruleLambdaState(clients, base, landingZone)
-    complianceForwarderState(clients, base, eventBus, landingZone)
-
-def codeCore(clients, base):
-    dispatchLambdaRole = dispatchLambdaRoleVerify(clients, base)
-    dispatchLambdaState(clients, base, dispatchLambdaRole)
+    complianceForwarderState(clients, base, eventBus, optOrganization)
 
 def code(args):
     profile = Profile()
     clients = Clients(args, profile)
     base = BaseState(args, profile)
+    landingZone = landingZoneState(clients, base)
     if args.core:
-        codeCore(clients, base)
+        dispatchLambdaRole = dispatchLambdaRoleVerify(clients, base)
+        dispatchLambdaState(clients, base, dispatchLambdaRole, landingZone)
+    if args.rules:
+        ruleLambdaState(clients, base, landingZone)
 
 def remove(args):
     profile = Profile()
@@ -391,3 +411,9 @@ def remove(args):
     eventBusRemove(clients, base)
     localRoleRemove(clients, base)
 
+def view(args):
+    profile = Profile()
+    clients = Clients(args, profile)
+    base = BaseState(args, profile)
+    if args.forwarders:
+        complianceForwarderView(clients, base)

@@ -1,3 +1,4 @@
+# Specify an empty list to force a local installation within a landing zone
 def landingZoneSearch():
     return ['ControlTower', 'AutomatedLandingZone']
 
