@@ -4,14 +4,13 @@ from typing import List
 import cfg.core as cfgCore
 import cfg.roles as cfgRoles
 
-from lib.base import ConfigError
+from lib.base import ConfigError, RK
 import lib.base.ruleresponse as rr
 
 from lib.rdq import Profile
 from lib.rdq.svclambda import LambdaClient
 from lib.rdq.svccwm import CwmClient
 
-from lib.lambdas.core import has_expected_attribute, get_attribute
 from lib.lambdas.core.parser import Parser, RuleInvocation
 import lib.lambdas.core.cwdims as cwdims
 
@@ -29,6 +28,43 @@ def _is_standalone_mode(roleName):
     optStandaloneRemediation = standaloneRoles.get('Remediation')
     if not optStandaloneRemediation: return False
     return roleName == optStandaloneRemediation
+
+def _has_expected_attribute(src, id, aname, expected):
+    if not (aname in src):
+        report = {
+            RK.Synopsis: 'SkippedRecord',
+            RK.Cause: 'Required attribute missing from record',
+            'AttributeName': aname,
+            'RecordId': id
+        }
+        logging.warning(report)
+        return False
+    actual = src[aname]
+    if actual != expected:
+        report = {
+            RK.Synopsis: 'SkippedRecord',
+            RK.Cause: 'Attribute has an unexpected value',
+            'AttributeName': aname,
+            'ActualValue': actual,
+            'ExpectedValue': expected,
+            'RecordId': id
+        }
+        logging.warning(report)
+        return False
+    return True
+
+def _get_attribute(src, context, aname):
+    if not (aname in src):
+        report = {
+            RK.Synopsis: 'SkippedRecord',
+            RK.Cause: 'Required attribute is missing',
+            'AttributeName': aname,
+            'Context': context,
+            'RecordId': id
+        }
+        logging.warning(report)
+        return None
+    return src[aname]
 
 
 class RuleOutcome:
@@ -49,31 +85,32 @@ class Dispatcher:
     def get_base_config_rule_name(self, id, qval):
         spos = qval.find("-conformance-pack-")
         if spos <= 0:
-            msg = "Qualified config rule name '{}' in record '{}' is not in expected format".format(qval, id)
-            logging.warning(msg)
+            cause = "Qualified config rule name '{}' in record '{}' is not in expected format".format(qval, id)
+            report = {RK.Synopsis: 'SkippedMessage', RK.Cause: cause}
+            logging.warning(report)
             return None
         return qval[0:spos]
 
     def extract_dispatch(self, messageId, body):
-        if not has_expected_attribute(body, messageId, 'detail-type', "Config Rules Compliance Change"): return None
-        if not has_expected_attribute(body, messageId, 'source', "aws.config"): return None
+        if not _has_expected_attribute(body, messageId, 'detail-type', "Config Rules Compliance Change"): return None
+        if not _has_expected_attribute(body, messageId, 'source', "aws.config"): return None
 
-        detail = get_attribute(body, messageId, 'detail')
+        detail = _get_attribute(body, messageId, 'detail')
         if not detail: return None
-        resourceId = get_attribute(detail, messageId, "resourceId")
+        resourceId = _get_attribute(detail, messageId, "resourceId")
         if not resourceId: return None
-        resourceType = get_attribute(detail, messageId, "resourceType")
+        resourceType = _get_attribute(detail, messageId, "resourceType")
         if not resourceType: return None
-        awsAccountId = get_attribute(detail, messageId, "awsAccountId")
+        awsAccountId = _get_attribute(detail, messageId, "awsAccountId")
         if not awsAccountId: return None
-        awsRegion = get_attribute(detail, messageId, "awsRegion")
+        awsRegion = _get_attribute(detail, messageId, "awsRegion")
         if not awsRegion: return None
-        configRuleNameQualified = get_attribute(detail, messageId, "configRuleName")
+        configRuleNameQualified = _get_attribute(detail, messageId, "configRuleName")
         if not configRuleNameQualified: return None
-        if not has_expected_attribute(detail, messageId, 'messageType', "ComplianceChangeNotification"): return None
-        newEvaluationResult = get_attribute(detail, messageId, "newEvaluationResult")
+        if not _has_expected_attribute(detail, messageId, 'messageType', "ComplianceChangeNotification"): return None
+        newEvaluationResult = _get_attribute(detail, messageId, "newEvaluationResult")
         if not newEvaluationResult: return None
-        complianceType = get_attribute(newEvaluationResult, messageId, "complianceType")
+        complianceType = _get_attribute(newEvaluationResult, messageId, "complianceType")
         if not complianceType: return None
         configRuleNameBase = self.get_base_config_rule_name(messageId, configRuleNameQualified)
         if not configRuleNameBase: return None
@@ -90,16 +127,18 @@ class Dispatcher:
 
     def create_dispatch(self, record):
         if not ("messageId" in record):
-            logging.warning("Record is missing messageId. Skipping")
+            report = {RK.Synopsis: 'SkippedMessage', RK.Cause: 'Missing messageId', 'Record': record}
+            logging.warning(report)
             return None
         messageId = record["messageId"]
-        bodyjson = get_attribute(record, messageId, 'body')
+        bodyjson = _get_attribute(record, messageId, 'body')
         if not bodyjson: return None
         body = json.loads(bodyjson)
         dispatch = self.extract_dispatch(messageId, body)
         if not dispatch: return None
 
-        logging.info("Received Compliance Event: %s", dispatch)
+        report = {RK.Synopsis: 'ReceivedComplianceEvent', 'ParsedEvent': dispatch}
+        logging.info(report)
         complianceType = dispatch['complianceType']
         if complianceType == 'NON_COMPLIANT':
             dispatch['action'] = 'remediate'
@@ -108,7 +147,7 @@ class Dispatcher:
 
     def create_dispatch_list(self, event):
         dispatchList = []
-        records = get_attribute(event, "event", 'Records')
+        records = _get_attribute(event, "event", 'Records')
         if records:
             for record in records:
                 dispatch = self.create_dispatch(record)
@@ -127,7 +166,7 @@ class Dispatcher:
     def publish_preview(self, ri :RuleInvocation, ar :rr.ActionResponse):
         if not ri.event.preview: return
         syn = "Function {} Preview".format(ri.functionName)
-        report = {'Synopsis': syn, 'Preview': ar.preview}
+        report = {RK.Synopsis: syn, 'Preview': ar.preview}
         logging.warning(report)
 
     def analyze_response(self, ri :RuleInvocation, fr :dict) -> RuleOutcome:
@@ -137,8 +176,14 @@ class Dispatcher:
         statusCode = fr['StatusCode']
         payload = fr['Payload']
         if statusCode != 200:
-            syn = "Function {} attempt {} returned status code {}".format(functionName, attempt, statusCode)
-            report = {'Synopsis': syn, 'Response': fr, 'Event': event.toDict()}
+            report = {
+                RK.Synopsis: "BadLambdaFunctionStatusCode",
+                'StatusCode': statusCode,
+                'Function': functionName,
+                'Attempt': attempt,
+                'Response': fr,
+                'Event': event.toDict()
+            }
             logging.error(report)
             return RuleOutcome(True)
 
@@ -146,21 +191,35 @@ class Dispatcher:
         self.publish_cloudwatch_metrics(ri, ar)
 
         if ar.isTimeout:
-            syn = "Function {} attempt {} Timeout".format(functionName, attempt)
-            report = {'Synopsis': syn, 'Response': ar.toDict(), 'Event': event.toDict()}
+            report = {
+                RK.Synopsis: "LambdaFunctionTimeout",
+                'Function': functionName,
+                'Attempt': attempt,
+                'Event': event.toDict()
+            }
             logging.error(report)
             return RuleOutcome(True)
 
         self.publish_preview(ri, ar)
 
         if ar.isSuccess:
-            syn = "Function {} attempt {} Succeeded".format(functionName, attempt)
-            report = {'Synopsis': syn, 'Response': ar.toDict(), 'Event': event.toDict()}
+            report = {
+                RK.Synopsis: "LambdaFunctionSuccess",
+                'Function': functionName,
+                'Attempt': attempt,
+                'Response': ar.toDict(),
+                'Event': event.toDict()
+            }
             logging.info(report)
             return RuleOutcome(False, True)
         
-        syn = "Function {} attempt {} Failed".format(functionName, attempt)
-        report = {'Synopsis': syn, 'Response': ar.toDict(), 'Event': event.toDict()}
+        report = {
+            RK.Synopsis: "LambdaFunctionFailed",
+            'Function': functionName,
+            'Attempt': attempt,
+            'Response': ar.toDict(),
+            'Event': event.toDict()
+        }
         logging.error(report)
         return RuleOutcome(False, False)
 

@@ -131,18 +131,20 @@ class TestRdq(unittest.TestCase):
             'Timeout': 180,
             'MemorySize': 128
         }
+        concurrency = {}
         iamc.removeRole(roleName)
         lambdac.removeFunction(functionName)
         expectedLambdaArn = profile.getRegionAccountArn('lambda', "function:{}".format(functionName))
         roleArn = iamc.declareRoleArn(roleName, roleDescription, lambdaTrustPolicy, tags)
         iamc.declareManagedPoliciesForRole(roleName, [lambdaPolicyArn])
-        lambdaArn = lambdac.declareFunctionArn(functionName, functionDescription, roleArn, functionCfg, codeZip, tags)
+        lambdaArn = lambdac.declareFunctionArn(functionName, functionDescription, roleArn, functionCfg, concurrency, codeZip, tags)
         assert lambdaArn == expectedLambdaArn
         functionDescriptionDelta1 = functionDescription + " Delta1"
-        lambdaArn1 = lambdac.declareFunctionArn(functionName, functionDescriptionDelta1, roleArn, functionCfg, codeZip, tags)
+        concurrency['ReservedConcurrentExecutions'] = 1
+        lambdaArn1 = lambdac.declareFunctionArn(functionName, functionDescriptionDelta1, roleArn, functionCfg, concurrency, codeZip, tags)
         assert lambdaArn1 == expectedLambdaArn
         codeZipDelta1 = codeLoader.getTestCode('SimpleCredentialCheck')
-        lambdaArn2 = lambdac.declareFunctionArn(functionName, functionDescriptionDelta1, roleArn, functionCfg, codeZipDelta1, tags)
+        lambdaArn2 = lambdac.declareFunctionArn(functionName, functionDescriptionDelta1, roleArn, functionCfg, concurrency, codeZipDelta1, tags)
         assert lambdaArn2 == expectedLambdaArn
         functionIn = {
             'source': "unit-test"
@@ -251,7 +253,7 @@ class TestRdq(unittest.TestCase):
             template = cfn.Template(stackDescription, resources)
             stackId = cfnc.declareStack(stackName, template, task_autoResourceTags)
             optStack = cfnc.getCompletedStack(stackName, stackMaxSecs)
-            self.assertTrue(len(optStack) > 0)
+            self.assertIsNotNone(optStack)
             cycle = cycle + 1
 
         cfnc.removeStack(stackName)
@@ -310,7 +312,7 @@ class TestRdq(unittest.TestCase):
 if __name__ == '__main__':
     initLogging(None, 'INFO')
     loader = unittest.TestLoader()
-    loader.testMethodPrefix = "test_stackset"
+    loader.testMethodPrefix = "test_lambda"
     unittest.main(warnings='default', testLoader = loader)
     # setup_assume_role('746869318262')
     # test_assume_role('119399605612')

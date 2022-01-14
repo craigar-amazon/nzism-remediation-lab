@@ -4,6 +4,7 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
+
         {
             "name": "Python: Current File",
             "type": "python",
@@ -30,7 +31,17 @@
             "console": "integratedTerminal"
         },
         {
-            "name": "Installer code",
+            "name": "Installer init local",
+            "type": "python",
+            "request": "launch",
+            "program": "src/installer.py",
+            "args": [
+                "--local", "init"
+            ],
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Installer code core",
             "type": "python",
             "request": "launch",
             "program": "src/installer.py",

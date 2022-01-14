@@ -1,5 +1,6 @@
 import logging
 
+from lib.base import RK
 from lib.rule import Task, RuleTimeoutError
 
 from lib.rdq import Profile
@@ -7,9 +8,7 @@ from lib.rdq.svckms import KmsClient
 from lib.rdq.svccfn import CfnClient
 
 import lib.cfn as cfn
-import lib.cfn.iam as iam
 import lib.cfn.kms as kms
-import lib.cfn.cloudwatchlogs as cwl
 
 class CMKResolver:
     def __init__(self, profile :Profile):
@@ -44,11 +43,13 @@ class CMKResolver:
         optStack = cfnc.getCompletedStack(stackName, stackMaxSecs)
         if not optStack:
             erm = "Stack {} did not complete within {} secs".format(stackName, stackMaxSecs)
-            logging.warning("%s | Stack Id: %s",erm, stackId)
+            report = {RK.Synopsis: 'StackTimeout', RK.Cause: erm, 'StackName': stackName, 'StackId': stackId, RK.Handling: 'RuleTimeoutError'}
+            logging.warning(report)
             raise RuleTimeoutError(erm)
         newCMK = self._kmsClient.getCMKByAlias(aliasBase)
         if not newCMK:
-            erm = "Stack {} completed, but CMK {} is not yet available".format(stackName, aliasBase)
-            logging.warning("%s | Stack Id: %s",erm, stackId)
+            erm = "Stack completed, but CMK {} is not yet available".format(aliasBase)
+            report = {RK.Synopsis: 'StackResourceProblem', RK.Cause: erm, 'StackName': stackName, 'StackId': stackId, RK.Handling: 'RuleTimeoutError'}
+            logging.warning(report)
             raise RuleTimeoutError(erm)
         return newCMK['Arn']

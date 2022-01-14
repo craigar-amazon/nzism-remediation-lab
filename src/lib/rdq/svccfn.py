@@ -63,6 +63,29 @@ class StackSetOperation:
         return json.dumps(self._props)
 
 
+class StackSummary:
+    def __init__(self, props):
+        self._props = props
+
+    @property
+    def stackId(self): return self._props['StackId']
+
+    @property
+    def status(self): return self._props.get('StackStatus')
+
+    @property
+    def statusReason(self): return self._props.get('StackStatusReason')
+
+    @property
+    def tags(self): return self._props.get('Tags')
+
+    def toDict(self) -> dict:
+        return self._props
+
+    def __str__(self):
+        return json.dumps(self._props)
+
+
 class StackInstanceSummary:
     def __init__(self, props):
         self._props = props
@@ -112,7 +135,7 @@ class CfnClient:
         self._utils = ServiceUtils(profile, service, maxAttempts)
 
 
-    def describe_stack(self, stackName):
+    def describe_stack(self, stackName) -> StackSummary:
         op = "describe_stacks"
         try:
             paginator = self._client.get_paginator(op)
@@ -124,7 +147,7 @@ class CfnClient:
                     results.append(item)
             resultCount = len(results)
             if resultCount == 0: return None
-            if resultCount == 1: return results[0]
+            if resultCount == 1: return StackSummary(results[0])
             raise RdqError(self._utils.integrity("Multiple stacks for name", "StackName", stackName, "MatchCount", resultCount))
         except botocore.exceptions.ClientError as e:
             if self._utils.is_resource_not_found(e): return None
@@ -359,14 +382,14 @@ class CfnClient:
                     continue
                 raise RdqError(self._utils.fail(e, op, 'StackSetName', stackSetName, 'CallAs', callAs, 'OrgUnitIds', ouSet))
 
-    def get_completed_stack(self, stackName, maxSecs):
+    def get_completed_stack(self, stackName, maxSecs) -> StackSummary:
         op = 'AwaitStackCompletion'
         tracker = self._utils.init_tracker(op, maxSecs=maxSecs, policy="ElapsedOnly")
         while True:
             stack = self.describe_stack(stackName)
             if not stack:
                 return None
-            status = stack['StackStatus']
+            status = stack.status
             if not _contains(status, '_IN_PROGRESS'):
                 return stack
             self._utils.info(op, 'StackName', stackName, "Waiting for Completion", "Status", status)
@@ -393,11 +416,11 @@ class CfnClient:
                 continue
             return True
 
-    def wait_on_running_stack(self, stackName, maxSecs):
+    def wait_on_running_stack(self, stackName, maxSecs) -> StackSummary:
         op = 'WaitForRunningStack'
-        completionStatus = self.get_completed_stack(stackName, maxSecs)
-        if completionStatus: return completionStatus
-        raise RdqTimeout(self._utils.expired(op, 'StackName', stackName, 'Status', completionStatus, 'MaxSecs', maxSecs))
+        completedStack = self.get_completed_stack(stackName, maxSecs)
+        if completedStack: return completedStack
+        raise RdqTimeout(self._utils.expired(op, 'StackName', stackName, 'MaxSecs', maxSecs))
 
     def wait_on_running_stack_set_operations(self, stackSetName, callAs, maxSecs):
         op = 'WaitForRunningStackSetOperations'
@@ -413,14 +436,14 @@ class CfnClient:
         rq = db.required()
         ex = self.describe_stack(stackName)
         if ex:
-            stackId = ex['StackId']
+            stackId = ex.stackId
             db.loadExisting(ex)
             exTemplate = self.get_template(stackName)
             db.loadExisting(exTemplate)
             db.normaliseExistingJson('TemplateBody')
             db.normaliseExistingList('Capabilities')
             delta = db.delta()
-            exTags = Tags(ex.get('Tags'))
+            exTags = Tags(ex.tags)
             deltaTags = tags.subtract(exTags)
             if len(delta) > 0 or deltaTags.notEmpty():
                 self.wait_on_running_stack(stackName, 120)
@@ -434,7 +457,10 @@ class CfnClient:
         self.get_completed_stack(stackName, 600)
         self.delete_stack(stackName)
 
-    def getCompletedStack(self, stackName, maxSecs=600):
+    def getStack(self, stackName) -> StackSummary:
+        return self.describe_stack(stackName)
+
+    def getCompletedStack(self, stackName, maxSecs=600) -> StackSummary:
         return self.get_completed_stack(stackName, maxSecs)
 
 

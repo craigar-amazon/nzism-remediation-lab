@@ -44,7 +44,7 @@ class EventBridgeClient:
             if self._utils.is_resource_not_found(e): return False
             raise RdqError(self._utils.fail(e, op, 'EventBusName', eventBusName))
     
-    def put_permission(self, eventBusName, sid, action, condition):
+    def put_permission_conditional(self, eventBusName, sid, action, condition):
         op = 'put_permission'
         try:
             self._client.put_permission(
@@ -53,6 +53,18 @@ class EventBridgeClient:
                 Action = action,
                 StatementId = sid,
                 Condition = condition
+            )
+        except botocore.exceptions.ClientError as e:
+            raise RdqError(self._utils.fail(e, op, 'EventBusName', eventBusName, "Sid", sid))
+
+    def put_permission_principal(self, eventBusName, sid, action, principal):
+        op = 'put_permission'
+        try:
+            self._client.put_permission(
+                EventBusName=eventBusName,
+                Principal = principal,
+                Action = action,
+                StatementId = sid
             )
         except botocore.exceptions.ClientError as e:
             raise RdqError(self._utils.fail(e, op, 'EventBusName', eventBusName, "Sid", sid))
@@ -202,12 +214,7 @@ class EventBridgeClient:
     def declareEventBusPublishPermissionForAccount(self, eventBusName, accountId):
         sid = "pub-{}".format(accountId)
         action = 'events:PutEvents'
-        condition = {
-                'Type': 'StringEquals',
-                'Key': 'aws:PrincipalAccount',
-                'Value': accountId
-        }
-        self.put_permission(eventBusName, sid, action, condition)
+        self.put_permission_principal(eventBusName, sid, action, accountId)
 
     def declareEventBusPublishPermissionForOrganization(self, eventBusName, organizationId):
         sid = "pub-{}".format(organizationId)
@@ -217,7 +224,7 @@ class EventBridgeClient:
                 'Key': 'aws:PrincipalOrgID',
                 'Value': organizationId
         }
-        self.put_permission(eventBusName, sid, action, condition)
+        self.put_permission_conditional(eventBusName, sid, action, condition)
 
 
     def removeEventBus(self, eventBusName):

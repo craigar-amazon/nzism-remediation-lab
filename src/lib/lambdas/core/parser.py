@@ -2,6 +2,7 @@ import logging
 import json
 from typing import List
 
+from lib.base import RK
 import cfg.core as cfgCore
 import cfg.rules as cfgRules
 
@@ -68,7 +69,8 @@ class Parser:
     def get_target(self, accountId) -> TargetDescriptor:
         isExternalAccount = self._profile.accountId != accountId
         if self._isStandaloneMode and isExternalAccount:
-            logging.info("Skipping external account %s (Standalone Mode)", accountId)
+            report = {RK.Synopsis: "SkippingAccount", 'AccountId': accountId, RK.Cause: 'External accounts are ignored in standalone mode'}
+            logging.info(report)
             return None
         
         if self._isStandaloneMode:
@@ -115,14 +117,26 @@ class Parser:
         tagName = cfgRules.manualRemediationTagName(configRuleName, action, accountName)
         if not (tagName is None): return tagName
         tagName = "DoNotAutoRemediate"
-        logging.warning("No manual remediation tag defined for rule %s; will use %s", configRuleName, tagName)
+        report = {
+            RK.Synopsis: "PartialConfig",
+            'Rule': configRuleName,
+            RK.Cause: "No manual remediation tag defined by rule",
+            RK.Mitigation: "Will use {}".format(tagName)
+        }
+        logging.warning(report)
         return tagName
 
     def get_auto_resource_tags(self, configRuleName, action, accountName):
         tags = cfgRules.autoResourceTags(configRuleName, action, accountName)
         if not (tags is None): return tags
         tags = {'AutoDeployed': 'True'}
-        logging.warning("No tags defined for auto-deployed resources by rule %s; will use %s", configRuleName, tags)
+        report = {
+            RK.Synopsis: "PartialConfig",
+            'Rule': configRuleName,
+            RK.Cause: "No tags defined for auto-deployed resources by rule",
+            RK.Mitigation: "Will use tags {}".format(tags)
+        }
+        logging.warning(report)
         return tags
 
 
@@ -133,20 +147,20 @@ class Parser:
         optTargetDescriptor = self.get_target(targetAccountId)
         if not optTargetDescriptor: return None
         if not optTargetDescriptor.isActive:
-            report = {'Synopsis': "AccountNotActive", 'Dispatch': dispatch, 'Target': optTargetDescriptor.toDict()}
+            report = {RK.Synopsis: "AccountNotActive", 'Dispatch': dispatch, 'Target': optTargetDescriptor.toDict()}
             logging.info(report)
             return None
         targetAccountName = optTargetDescriptor.accountName
         configRuleName = dispatch['configRuleNameBase']
         ruleCodeFolder = cfgRules.codeFolder(configRuleName, action, targetAccountName)
         if not ruleCodeFolder:
-            report = {'Synopsis': "NoRuleImplementation", 'Dispatch': dispatch, 'Target': optTargetDescriptor.toDict()}
+            report = {RK.Synopsis: "NoRuleImplementation", 'Dispatch': dispatch, 'Target': optTargetDescriptor.toDict()}
             logging.info(report)
             return None
         functionName = cfgCore.ruleFunctionName(ruleCodeFolder)
         acceptResource = filter.acceptResourceId(configRuleName, action, targetAccountName, resourceId)
         if not acceptResource:
-            report = {'Synopsis': "ResourceExempt", 'Dispatch': dispatch, 'Target': optTargetDescriptor.toDict()}
+            report = {RK.Synopsis: "ResourceExempt", 'Dispatch': dispatch, 'Target': optTargetDescriptor.toDict()}
             logging.info(report)
             return None
 

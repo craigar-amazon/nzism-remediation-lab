@@ -3,7 +3,7 @@ from lib.base import Tags, ConfigError, DictBuild
 
 from lib.rdq import Profile
 from lib.rdq.svciam import IamClient, RoleDescriptor
-from lib.rdq.svcorg import OrganizationClient, OrganizationDescriptor, OrganizationUnit, OrganizationUnitTree
+from lib.rdq.svcorg import OrganizationClient, OrganizationDescriptor, OrganizationUnit
 from lib.rdq.svckms import KmsClient
 from lib.rdq.svccfn import CfnClient
 from lib.rdq.svceventbridge import EventBridgeClient
@@ -42,6 +42,8 @@ def getCoreEventBusCfgValue(key): return get_map_value(cfg.core.coreEventBusCfg(
 def getCoreQueueCfgValue(key): return get_map_value(cfg.core.coreQueueCfg(), "cfg.core.coreQueueCfg", key)
 def getStandaloneRolesCfgValue(key): return get_map_value(cfg.roles.standaloneRoles(), "cfg.roles.standaloneRoles", key)
 
+def get_lambda_concurrency():
+    return {'ReservedConcurrentExecutions': 1}
 
 class Clients:
     def __init__(self, args, profile :Profile):
@@ -58,6 +60,7 @@ class BaseState:
     def __init__(self, args, profile :Profile):
         self.args = args
         self.profile = profile
+        self.isLocal = args.forcelocal
         self.tagsCore = Tags(cfg.core.coreResourceTags(), context="cfg.core.coreResourceTags")
         self.eventBusName = cfg.core.coreResourceName('AutoRemediationEventBus')
         self.complianceRuleName = cfg.core.coreResourceName('ComplianceChangeRule')
@@ -111,7 +114,7 @@ class OrganizationState:
         self.regionList = regionList
 
 def organizationState(clients: Clients, base: BaseState) -> OrganizationState:
-    if base.args.forcelocal: return None
+    if base.isLocal: return None
     descriptor = clients.org.getOrganizationDescriptor()
     print("Detected Organization ARN: {}".format(descriptor.arn))
     print("Enumerating OUs...")
@@ -153,7 +156,7 @@ class LandingZoneState:
         self.remediationRoleName = remediationRoleName
 
 def landingZoneState(clients: Clients, base: BaseState) -> LandingZoneState:
-    if base.args.forcelocal:
+    if base.isLocal:
         print("Local installation has been specified")
         forceLocalRole = localRoleState(clients, base)
         return LandingZoneState(forceLocalRole.auditRoleArn, forceLocalRole.remediationRoleName)
@@ -277,13 +280,15 @@ class DispatchLambdaState:
 
 def dispatchLambdaState(clients: Clients, base: BaseState, role: DispatchLambdaRoleState, landingZone :LandingZoneState) -> DispatchLambdaState:
     functionName = base.dispatchFunctionName
+    roleArn = role.roleArn
     functionDesc = 'Compliance Dispatcher Lambda'
     functionCfgBuild = DictBuild(cfg.core.dispatchFunctionCfg())
     envKey = "Environment.Variables.{}".format(cfg.core.environmentVariableNameRemediationRole())
     functionCfgBuild.extend(envKey, landingZone.remediationRoleName)
     functionCfg = functionCfgBuild.toDict()
+    concurrency = get_lambda_concurrency()
     codeZip = codeLoader.getCoreCode(base.dispatchLambdaCodeName)
-    lambdaArn = clients.lambdafun.declareFunctionArn(functionName, functionDesc, role.roleArn, functionCfg, codeZip, base.tagsCore)
+    lambdaArn = clients.lambdafun.declareFunctionArn(functionName, functionDesc, roleArn, functionCfg, concurrency, codeZip, base.tagsCore)
     print("Core Dispatch Lambda ARN: {}".format(lambdaArn))
     return DispatchLambdaState(lambdaArn)
 
@@ -301,14 +306,16 @@ def dispatchLambdaQueueConsumerRemove(clients: Clients, base: BaseState):
     clients.lambdafun.removeEventSourceMappingsForFunction(base.dispatchFunctionName)
 
 def ruleLambdaState(clients: Clients, base: BaseState, landingZone :LandingZoneState):
+    tags = base.tagsCore
     roleArn = landingZone.auditRoleArn
+    concurrency = get_lambda_concurrency()
     ruleFolders = codeLoader.getAvailableRules()
     for ruleFolder in ruleFolders:
         codeZip = codeLoader.getRuleCode(ruleFolder)
         functionName = cfg.core.ruleFunctionName(ruleFolder)
         functionDesc = '{} Auto Remediation Lambda'.format(ruleFolder)
         functionCfg = cfg.core.ruleFunctionCfg(ruleFolder)
-        lambdaArn = clients.lambdafun.declareFunctionArn(functionName, functionDesc, roleArn, functionCfg, codeZip, base.tagsCore)
+        lambdaArn = clients.lambdafun.declareFunctionArn(functionName, functionDesc, roleArn, functionCfg, concurrency, codeZip, tags)
         print("Rule Lambda ARN: {}".format(lambdaArn))
 
 def ruleLambdaRemove(clients: Clients, base: BaseState):
@@ -357,18 +364,26 @@ def complianceForwarderRemove(clients: Clients, base: BaseState):
 
 def complianceForwarderView(clients: Clients, base: BaseState):
     stackName = base.complianceForwarderStackName
-    siList = clients.cfn.listStackInstances(stackName)
-    for si in siList:
-        accountDesc = clients.org.getAccountDescriptor(si.account)
-        if accountDesc:
-            accountInfo = "{} - {} {} ({})".format(accountDesc.accountName, si.account, accountDesc.status, si.ouId)
-        else:
-            accountInfo = "{} ({})".format(si.account, si.ouId)
-        status = si.status if si.status else '-'
-        if si.statusReason:
-            status = status + " (" + si.statusReason + ")"
-        stackStatus = si.stackInstanceStatus if si.stackInstanceStatus else '-'
-        print("{} {} | Status: {} | Stack: {}".format(accountInfo, si.region, status, stackStatus))
+    if base.isLocal:
+        ss = clients.cfn.getStack(stackName)
+        status = ss.status if ss.status else '-'
+        if ss.statusReason:
+            status = status + " (" + ss.statusReason + ")"
+        print("Local Compliance Forwarder | Status: {}".format(status))
+    else:
+        siList = clients.cfn.listStackInstances(stackName)
+        print("Compliance Forwarders:")
+        for si in siList:
+            accountDesc = clients.org.getAccountDescriptor(si.account)
+            if accountDesc:
+                accountInfo = "{} - {} {} ({})".format(accountDesc.accountName, si.account, accountDesc.status, si.ouId)
+            else:
+                accountInfo = "{} ({})".format(si.account, si.ouId)
+            status = si.status if si.status else '-'
+            if si.statusReason:
+                status = status + " (" + si.statusReason + ")"
+            stackStatus = si.stackInstanceStatus if si.stackInstanceStatus else '-'
+            print("> {} {} | Status: {} | Stack: {}".format(accountInfo, si.region, status, stackStatus))
 
 
 def init(args):

@@ -11,6 +11,8 @@ def _codeSha256(codeZip):
     hash.update(codeZip)
     return base64.b64encode(hash.digest()).decode()
 
+_UndefinedConcurrency = -1
+
 class LambdaClient:
     def __init__(self, profile, maxAttempts=10):
         service = 'lambda'
@@ -46,6 +48,16 @@ class LambdaClient:
             if self._utils.retry(tracker):
                 tracker = self._utils.backoff(tracker)
 
+    def get_function_concurrency(self, functionArn):
+        op = 'get_function_concurrency'
+        try:
+            response = self._client.get_function_concurrency(
+                FunctionName=functionArn
+            )
+            return response.get('ReservedConcurrentExecutions', _UndefinedConcurrency)
+        except botocore.exceptions.ClientError as e:
+            if self._utils.is_resource_not_found(e): return -1
+            raise RdqError(self._utils.fail(e, op, 'FunctionArn', functionArn))
 
     # Allow lambda:CreateFunction
     def create_function(self, functionName, rq, codeZip, tags):
@@ -117,6 +129,17 @@ class LambdaClient:
                     continue
                 raise RdqError(self._utils.fail(e, op, 'FunctionName', functionName))
 
+    def put_function_concurrency(self, functionArn, reservedConcurrentExecutions: int):
+        op = 'put_function_concurrency'
+        if reservedConcurrentExecutions == _UndefinedConcurrency: return False
+        try:
+            self._client.put_function_concurrency(
+                FunctionName=functionArn,
+                ReservedConcurrentExecutions = reservedConcurrentExecutions
+            )
+            return True
+        except botocore.exceptions.ClientError as e:
+            raise RdqError(self._utils.fail(e, op, 'FunctionArn', functionArn, 'ReservedConcurrentExecutions', reservedConcurrentExecutions))
 
     def get_policy(self, functionArn):
         op = 'get_policy'
@@ -299,26 +322,28 @@ class LambdaClient:
         except botocore.exceptions.ClientError as e:
             raise RdqError(self._utils.fail(e, op, 'FunctionName', functionName))
 
-    def declareFunctionArn(self, functionName, functionDescription, roleArn, cfg, codeZip, tags):
-        db = DeltaBuild()
-        db.putRequired('Handler', 'lambda_function.lambda_handler')
-        db.putRequired('Environment.Variables.LOGLEVEL', 'INFO')
-        db.updateRequired(cfg)
-        db.putRequired('Description', functionDescription)
-        db.putRequired('Role', roleArn)
-        rq = db.required()
+    def declareFunctionArn(self, functionName, description, roleArn, cfg: dict, concurrency: dict, codeZip, tags: Tags):
+        dbCfg = DeltaBuild()
+        dbCfg.putRequired('Handler', 'lambda_function.lambda_handler')
+        dbCfg.putRequired('Environment.Variables.LOGLEVEL', 'INFO')
+        dbCfg.updateRequired(cfg)
+        dbCfg.putRequired('Description', description)
+        dbCfg.putRequired('Role', roleArn)
+        rqCfg = dbCfg.required()
+        rqReservedConcurrentExecutions = concurrency.get('ReservedConcurrentExecutions', _UndefinedConcurrency)
         exFunction = self.get_function(functionName)
         if not exFunction:
-            newFunction = self.create_function(functionName, rq, codeZip, tags)
+            newFunction = self.create_function(functionName, rqCfg, codeZip, tags)
             self.get_function_nonpending(functionName)
+            self.put_function_concurrency(functionName, rqReservedConcurrentExecutions)
             return newFunction['FunctionArn']
         exFunctionConfiguration = exFunction['Configuration']
         exFunctionArn = exFunctionConfiguration['FunctionArn']
-        db.loadExisting(exFunctionConfiguration)
-        delta = db.delta()
+        dbCfg.loadExisting(exFunctionConfiguration)
+        delta = dbCfg.delta()
         if delta:
             self._utils.info('CheckConfigurationDelta', 'FunctionName', functionName, "Reconfiguring", "Delta", delta)
-            self.update_function_configuration(functionName, rq)
+            self.update_function_configuration(functionName, rqCfg)
             self.get_function_nonpending(functionName)        
         exCodeSha256 = exFunctionConfiguration['CodeSha256']
         inCodeSha256 = _codeSha256(codeZip)
@@ -327,6 +352,9 @@ class LambdaClient:
             self.get_function_nonpending(functionName)
         else:
             self._utils.info('CheckCodeSHA256', 'FunctionName', functionName, "Code unchanged", "CodeSHA256", exCodeSha256)
+        exReservedConcurrentExecutions = self.get_function_concurrency(functionName)
+        if exReservedConcurrentExecutions != rqReservedConcurrentExecutions:
+            self.put_function_concurrency(functionName, rqReservedConcurrentExecutions)
         exTags = Tags(exFunction['Tags'], functionName)
         self._utils.declare_tags(exFunctionArn, tags, exTags)
         return exFunctionArn

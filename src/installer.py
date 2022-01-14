@@ -8,8 +8,9 @@ import cmds.builder
 
 
 helpLocal = '''
-Forces a local-account-only installation of the remediation pack when a landing zone is detected.
-If the remediation pack is installed in a stand-alone account, installation will always be local.
+Disables the landing zone search path in the cfg.roles.py file for all sub-commands, including 'init' and 'code'.
+Setting this flag performs a local-account-only installation, even if the account is part of a landing zone. 
+Either specify this flag, or set the landing zone search path to an empty list, when installing into a standalone account.
 '''
 
 helpPrecheck = '''

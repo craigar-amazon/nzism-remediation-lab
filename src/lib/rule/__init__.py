@@ -4,7 +4,7 @@ import time
 
 from typing import Callable
 
-from lib.base import initLogging, Tags
+from lib.base import initLogging, Tags, RK
 import lib.base.ruleresponse as rr
 from lib.rdq import Profile, RdqError, RdqTimeout
 
@@ -168,6 +168,7 @@ class RuleMain:
         return out[0:64]
 
     def _action_task(self, handlingMethod :Callable[[Profile, Task], rr.ActionResponse], task :Task) -> rr.ActionResponse:
+        _context = "Task Handler"
         try:
             action = task.action
             awsAccountId = task.accountId
@@ -189,33 +190,34 @@ class RuleMain:
                 actionResponse.putPreview(previewResponse)
             return actionResponse
         except RuleTimeoutError as e:
-            report = {'Synopsis': "RuleTimeout", 'Context': "Task Handler", 'Cause': e.message, 'Task': task.toDict()}
+            report = {RK.Synopsis: "RuleTimeout", RK.Context: _context, RK.Cause: e.message, 'Task': task.toDict()}
             logging.warning(report)
             return rr.ActionTimeoutConfiguration(action, e.message)
         except RdqTimeout as e:
-            report = {'Synopsis': "RdqTimeout", 'Context': "Task Handler", 'Cause': e.message, 'Task': task.toDict()}
+            report = {RK.Synopsis: "RdqTimeout", RK.Context: _context, RK.Cause: e.message, 'Task': task.toDict()}
             logging.warning(report)
             return rr.ActionTimeoutRdq(action, e.message)
         except RdqError as e:
-            report = {'Synopsis': "RdqError", 'Context': "Task Handler", 'Cause': e.message, 'Task': task.toDict()}
+            report = {RK.Synopsis: "RdqError", RK.Context: _context, RK.Cause: e.message, 'Task': task.toDict()}
             logging.error(report)
             return rr.ActionFailureRdq(action, e.message)
         except RuleConfigurationError as e:
-            report = {'Synopsis': "RuleConfigurationError", 'Context': "Task Handler", 'Cause': e.message, 'Task': task.toDict()}
+            report = {RK.Synopsis: "RuleConfigurationError", RK.Context: _context, RK.Cause: e.message, 'Task': task.toDict()}
             logging.error(report)
             return rr.ActionFailureConfiguration(action, e.message)
         except RuleSoftwareError as e:
-            report = {'Synopsis': "RuleSoftwareError", 'Context': "Task Handler", 'Cause': e.message, 'Task': task.toDict()}
+            report = {RK.Synopsis: "RuleSoftwareError", RK.Context: _context, RK.Cause: e.message, 'Task': task.toDict()}
             logging.error(report)
             return rr.ActionFailureSoftware(action, e.message)
         except Exception as e:
             syn = str(type(e))
             msg = str(e)
-            report = {'Synopsis': syn, 'Context': "Task Handler", 'Cause': msg, 'Task': task.toDict()}
+            report = {RK.Synopsis: syn, RK.Context: _context, RK.Cause: msg, 'Task': task.toDict()}
             logging.exception(report)
             return rr.ActionFailure(action, syn)
 
     def _action_event(self, event) -> rr.ActionResponse:
+        _context = 'Task Setup'
         action = 'setup'
         try:
             action = self._required_action(event)
@@ -249,17 +251,17 @@ class RuleMain:
             task = Task(taskProps)
             return self._action_task(handlingMethod, task)
         except RuleConfigurationError as e:
-            report = {'Synopsis': "RuleConfigurationError", 'Context': "Task Setup", 'Cause': e.message, 'Event': event}
+            report = {RK.Synopsis: "RuleConfigurationError", RK.Context: _context, RK.Cause: e.message, 'Event': event}
             logging.error(report)
             return rr.ActionFailureConfiguration(action, e.message)
         except RuleSoftwareError as e:
-            report = {'Synopsis': "RuleSoftwareError", 'Context': "Task Setup", 'Cause': e.message, 'Event': event}
+            report = {RK.Synopsis: "RuleSoftwareError", RK.Context: _context, RK.Cause: e.message, 'Event': event}
             logging.error(report)
             return rr.ActionFailureSoftware(action, e.message)
         except Exception as e:
             syn = str(type(e))
             msg = str(e)
-            report = {'Synopsis': syn, 'Context': "Task Setup", 'Cause': msg, 'Event': event}
+            report = {RK.Synopsis: syn, RK.Context: "Task Setup", RK.Cause: msg, 'Event': event}
             logging.exception(report)
             return rr.ActionFailure(action, syn)
 

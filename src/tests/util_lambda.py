@@ -175,6 +175,7 @@ def run_invoke(preview, configRuleName, resourceType, resourceId, action, deploy
         }
     }
     functionCfg = cfgCore.ruleFunctionCfg(codeFolder)
+    concurrency = {}
     tagsRule = Tags(cfgCore.ruleResourceTags(), "ruleResourceTags")
     codeZip = codeLoader.getTestCode(codeFolder)
     profile = Profile()
@@ -182,7 +183,7 @@ def run_invoke(preview, configRuleName, resourceType, resourceId, action, deploy
     functionName = "UnitTest-{}".format(codeFolder)
     functionDescription = "UnitTest {} Lambda".format(codeFolder)
     roleArn = profile.getRoleArn(lambdaRoleName)
-    lambdaArn = lambdac.declareFunctionArn(functionName, functionDescription, roleArn, functionCfg, codeZip, tagsRule)
+    lambdaArn = lambdac.declareFunctionArn(functionName, functionDescription, roleArn, functionCfg, concurrency, codeZip, tagsRule)
     print("Unit Test Lambda Deployed: {}".format(lambdaArn))
     targetProfile = profile.assumeRole(toAccountId, prepRoleName, profile.regionName, 'InvokeTestPrepare')
     if setupFunction:

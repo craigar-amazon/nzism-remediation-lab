@@ -1,5 +1,15 @@
 import os, json, logging
 
+class ReportingKeywords:
+    def __init__(self):
+        self.Synopsis = 'Synopsis'
+        self.Cause = 'Cause'
+        self.Mitigation = 'Mitigation'
+        self.Context = 'Context'
+        self.Handling = 'Handling'
+
+RK = ReportingKeywords()
+
 def initLogging(logLevelVariable='LOGLEVEL', defaultLevel='INFO', announceLogLevel=True):
     levelName = defaultLevel
     if logLevelVariable:

@@ -204,7 +204,9 @@ class ServiceUtils:
             syn = "{} client error".format(sop)
         else:
             syn = "{} client error for {}: `{}`".format(sop, argType, argValue)
-        report = {'Synopsis': syn, 'Context': ec, 'Detail': e}
+        ert = str(type(e))
+        erd = str(e)
+        report = {'Synopsis': syn, 'Context': ec, 'Type': ert, 'Detail': erd, 'Handling': 'RdqError'}
         logging.error(report)
         return syn
 
@@ -216,7 +218,7 @@ class ServiceUtils:
         ec['AccountId'] = self._profile.accountId
         ec['SessionName'] = self._profile.sessionName
         syn = "{} data integrity error: {}".format(svc, msg)
-        report = {'Synopsis': syn, 'Context': ec}
+        report = {'Synopsis': syn, 'Context': ec, 'Handling': 'RdqError'}
         logging.error(report)
         return syn
 
@@ -230,7 +232,7 @@ class ServiceUtils:
         ec['AccountId'] = self._profile.accountId
         ec['SessionName'] = self._profile.sessionName
         syn = "{} expired".format(op)
-        report = {'Synopsis': syn, 'Service': svc, 'Context': ec}
+        report = {'Synopsis': syn, 'Service': svc, 'Context': ec, 'Handling': 'RdqError'}
         logging.error(report)
         return syn
 
