@@ -1,6 +1,7 @@
 import unittest
 from lib.base import initLogging, Tags
 from lib.rdq import Profile
+from lib.rdq.svccfg import CfgClient
 from lib.rdq.svciam import IamClient
 from lib.rdq.svcorg import OrganizationClient
 from lib.rdq.svclambda import LambdaClient
@@ -307,12 +308,34 @@ class TestRdq(unittest.TestCase):
             print("{}:{} - {}".format(sx.account, sx.stackInstanceStatus, sx))
         cfnc.removeStackSet(stackSetName)
 
+    def test_redrive(self):
+        profile = Profile()
+        cfgc = CfgClient(profile)
+        orgc = OrganizationClient(profile)
+        isLocal = True
+        aggregatorName = None if isLocal else 'NZISM'
+        agenda = cfgc.selectNonCompliantAccountAgenda(aggregatorName)
+        for accountId in agenda.accountIds():
+            if isLocal:
+                accountName = 'local'
+                accountIsActive = True
+            else:
+                accountDesc = orgc.getAccountDescriptor(accountId)
+                accountName = accountDesc.accountName
+                accountIsActive = accountDesc.isActive
+            if not accountIsActive: continue
+            for regionName in agenda.regionNames(accountId):
+                configRuleNameSet = agenda.configRuleNameSet(accountId, regionName)
+                for ruleName in configRuleNameSet:
+                    resourceDescriptors = cfgc.listNonCompliantResources(ruleName, aggregatorName, accountId, regionName)
+                    for rd in resourceDescriptors:                        
+                        print("{} {}: {} {}".format(accountName, ruleName, rd.resourceType, rd.resourceId))
 
 
 if __name__ == '__main__':
     initLogging(None, 'INFO')
     loader = unittest.TestLoader()
-    loader.testMethodPrefix = "test_lambda"
+    loader.testMethodPrefix = "test_redrive"
     unittest.main(warnings='default', testLoader = loader)
     # setup_assume_role('746869318262')
     # test_assume_role('119399605612')

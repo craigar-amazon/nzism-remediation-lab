@@ -30,12 +30,11 @@ class LandingZoneDiscovery:
         self._iamClient = IamClient(profile)
 
     def getLandingZoneDescriptor(self) -> LandingZoneDescriptor:
-        lzsearchIn = cfgroles.landingZoneSearch()
-        lzsearch = list() if lzsearchIn is None else list(lzsearchIn)
-        searchLength = len(lzsearch)
+        lzsearch = cfgroles.landingZoneSearch()
+        searchLength = 0 if lzsearch is None else len(lzsearch)
         if searchLength == 0:
-            logging.info("No landing zone configured. Will assume stand-alone account.")
-            return None
+            syn = "Landing zone search path is undefined or empty"
+            raise ConfigError(syn)
 
         lzroles = cfgroles.landingZoneRoles()
         for lzType in lzsearch:

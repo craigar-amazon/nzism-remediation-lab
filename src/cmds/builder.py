@@ -28,6 +28,10 @@ def get_list(src: list, srcPath) -> list:
     if len(src) == 0: raise ConfigError("{} is empty".format(srcPath))
     return src
 
+def get_list_len(src: list, srcPath) -> list:
+    if src is None: raise ConfigError("{} is undefined".format(srcPath))
+    return len(src)
+
 def get_map(src: dict, srcPath) -> dict:
     if src is None: raise ConfigError("{} is undefined".format(srcPath))
     if len(src) == 0: raise ConfigError("{} is empty".format(srcPath))
@@ -60,7 +64,6 @@ class BaseState:
     def __init__(self, args, profile :Profile):
         self.args = args
         self.profile = profile
-        self.isLocal = args.forcelocal
         self.tagsCore = Tags(cfg.core.coreResourceTags(), context="cfg.core.coreResourceTags")
         self.eventBusName = cfg.core.coreResourceName('AutoRemediationEventBus')
         self.complianceRuleName = cfg.core.coreResourceName('ComplianceChangeRule')
@@ -74,6 +77,8 @@ class BaseState:
         self.complianceForwarderStackName = cfg.core.coreResourceName('ComplianceChangeForwarder')
         self.complianceForwarderRoleName = cfg.core.coreResourceName('ComplianceChangeForwarderRole')
         self.complianceForwarderRuleName = cfg.core.coreResourceName('ComplianceChangeForwarderRule')
+        lzSearchPathLen = get_list_len(cfg.roles.landingZoneSearch(), "cfg.roles.landingZoneSearch")
+        self.isLocal = args.forcelocal or (lzSearchPathLen == 0)
 
 class LocalRoleState:
     def __init__(self, auditRoleArn, remediationRoleName):
@@ -104,8 +109,9 @@ def localRoleState(clients :Clients, base :BaseState) -> LocalRoleState:
     return LocalRoleState(auditRoleArn, roleName)
 
 def localRoleRemove(clients :Clients, base :BaseState):
-    clients.iam.removeRole(base.localRemediationRoleName)
-    clients.iam.removeRole(base.localAuditRoleName)
+    if base.isLocal:
+        clients.iam.removeRole(base.localRemediationRoleName)
+        clients.iam.removeRole(base.localAuditRoleName)
 
 class OrganizationState:
     def __init__(self, organizationDescriptor: OrganizationDescriptor, ouList: List[OrganizationUnit], regionList):
@@ -158,16 +164,12 @@ class LandingZoneState:
 def landingZoneState(clients: Clients, base: BaseState) -> LandingZoneState:
     if base.isLocal:
         print("Local installation has been specified")
-        forceLocalRole = localRoleState(clients, base)
-        return LandingZoneState(forceLocalRole.auditRoleArn, forceLocalRole.remediationRoleName)
+        localRole = localRoleState(clients, base)
+        return LandingZoneState(localRole.auditRoleArn, localRole.remediationRoleName)
     landingZoneDiscovery = LandingZoneDiscovery(base.profile)
-    optLZDescriptor: LandingZoneDescriptor = landingZoneDiscovery.getLandingZoneDescriptor()
-    if not optLZDescriptor:
-        print("Landing zone is not configured. Will install locally.")
-        requiredLocalRole = localRoleState(clients, base)
-        return LandingZoneState(requiredLocalRole.auditRoleArn, requiredLocalRole.remediationRoleName)
-    print('Detected {}'.format(optLZDescriptor.landingZoneType))
-    return LandingZoneState(optLZDescriptor.auditRoleArn, optLZDescriptor.remediationRoleName)
+    lzDescriptor: LandingZoneDescriptor = landingZoneDiscovery.getLandingZoneDescriptor()
+    print('Detected {}'.format(lzDescriptor.landingZoneType))
+    return LandingZoneState(lzDescriptor.auditRoleArn, lzDescriptor.remediationRoleName)
 
 
 class EventBusState:
@@ -358,8 +360,10 @@ def complianceForwarderState(clients: Clients, base: BaseState, eventBus :EventB
 def complianceForwarderRemove(clients: Clients, base: BaseState):
     stackName = base.complianceForwarderStackName
     print("Removing {}...".format(stackName))
-    clients.cfn.removeStack(stackName)
-    clients.cfn.removeStackSet(stackName)
+    if base.isLocal:
+        clients.cfn.removeStack(stackName)
+    else:
+        clients.cfn.removeStackSet(stackName)
     print("Removed {}".format(stackName))
 
 def complianceForwarderView(clients: Clients, base: BaseState):

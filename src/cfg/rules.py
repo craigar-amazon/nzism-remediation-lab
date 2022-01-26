@@ -32,7 +32,7 @@ def stackNamePattern(configRuleName, action, accountName):
     prefix = "{}-AutoDeployed-".format(cpName)
     return prefix + "{}"
 
-def manualRemediationTagName(configRuleName, action, accountName):
+def manualTagName(configRuleName, action, accountName):
     return 'ManualRemediation'
 
 def autoResourceTags(configRuleName, action, accountName):
@@ -51,10 +51,10 @@ def codeFolder(configRuleName, action, accountName):
 def isPreview(configRuleName, action, accountName):
     return bool(ruleTable.lookup(configRuleName, 'Preview', True))
 
-def canRemediate(configRuleName, action, accountName):
+def canRemediate(configRuleName, accountName):
     return ruleTable.lookup(configRuleName, 'CanRemediate', True)
 
-def canBaseline(configRuleName, action, accountName):
+def canBaseline(configRuleName, accountName):
     return ruleTable.lookup(configRuleName, 'CanBaseline', False)
 
 def deploymentMethod(configRuleName, action, accountName):

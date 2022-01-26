@@ -114,7 +114,7 @@ class Parser:
         return pattern
 
     def get_manual_tag_name(self, configRuleName, action, accountName):
-        tagName = cfgRules.manualRemediationTagName(configRuleName, action, accountName)
+        tagName = cfgRules.manualTagName(configRuleName, action, accountName)
         if not (tagName is None): return tagName
         tagName = "DoNotAutoRemediate"
         report = {
@@ -139,6 +139,10 @@ class Parser:
         logging.warning(report)
         return tags
 
+    def isActionEnabled(self, action, configRuleName, accountName):
+        if action == 'remediate' and cfgRules.canRemediate(configRuleName, accountName): return True
+        if action == 'baseline' and cfgRules.canBaseline(configRuleName, accountName): return True
+        return False
 
     def create_invoke(self, dispatch):
         action = dispatch['action']
@@ -155,6 +159,10 @@ class Parser:
         ruleCodeFolder = cfgRules.codeFolder(configRuleName, action, targetAccountName)
         if not ruleCodeFolder:
             report = {RK.Synopsis: "NoRuleImplementation", 'Dispatch': dispatch, 'Target': optTargetDescriptor.toDict()}
+            logging.info(report)
+            return None
+        if not self.isActionEnabled(action, configRuleName, targetAccountName):
+            report = {RK.Synopsis: "ActionDisabled", 'Dispatch': dispatch, 'Target': optTargetDescriptor.toDict()}
             logging.info(report)
             return None
         functionName = cfgCore.ruleFunctionName(ruleCodeFolder)
