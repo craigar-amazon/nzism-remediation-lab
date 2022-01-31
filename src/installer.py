@@ -1,10 +1,8 @@
 import argparse
 
-import lib.base
-import lib.rdq
+import lib.base, lib.rdq
 
-import cmds.precheck
-import cmds.builder
+import cmds.precheck, cmds.builder, cmds.redrive
 
 
 helpLocal = '''
@@ -58,12 +56,27 @@ helpViewForwarders = '''
 View the compliance event forwarder stacks.
 '''
 
+helpRedrive = '''
+Reattempt remediation of any non-compliant config rules.
+'''
+
+helpRedriveAggregator = '''
+The name of the AWS Config Aggregator to query for non-compliant resources in the Organization.
+If provided, this overrides the name returned by the cfg.core.coreRedriveAggregatorName() function.
+Specify the reserved name 'local' to limit the query to non-compliant resources in this account.
+This argument is ignored if '--local' is specified, as the query will always be limited to this account.
+'''
+
+helpRedrivePreviewFilters = '''
+Display the resource identifiers that match the redrive filters, but do not attempt to remediate.
+'''
 
 def main(subcmd):
     if subcmd == 'init': cmds.builder.init(args)
     elif subcmd == 'code': cmds.builder.code(args)
     elif subcmd == 'remove': cmds.builder.remove(args)
     elif subcmd == 'view': cmds.builder.view(args)
+    elif subcmd == 'redrive': cmds.redrive.process(args)
 
 
 topparser = argparse.ArgumentParser()
@@ -80,6 +93,9 @@ parser_remove = subparsers.add_parser('remove', help=helpRemove)
 parser_remove.add_argument('--remove-cmks',dest='removecmks', action='store_true', help=helpRemoveCmks)
 parser_view = subparsers.add_parser('view', help=helpView)
 parser_view.add_argument('--forwarders',dest='forwarders', action='store_true', help=helpViewForwarders)
+parser_redrive = subparsers.add_parser('redrive',help=helpRedrive)
+parser_redrive.add_argument('--aggregator',dest='aggregator', default='', help=helpRedriveAggregator)
+parser_redrive.add_argument('--previewfilters',dest='previewfilters', action='store_true', help=helpRedrivePreviewFilters)
 args = topparser.parse_args()
 if args.verbose:
     lib.base.initLogging(defaultLevel='INFO', announceLogLevel=True)

@@ -71,6 +71,26 @@
             "console": "integratedTerminal"
         },
         {
+            "name": "Installer local redrive",
+            "type": "python",
+            "request": "launch",
+            "program": "src/installer.py",
+            "args": [
+                "--local", "redrive"
+            ],
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Installer redrive default",
+            "type": "python",
+            "request": "launch",
+            "program": "src/installer.py",
+            "args": [
+                "redrive", "--previewfilter"
+            ],
+            "console": "integratedTerminal"
+        },
+        {
             "name": "Installer test",
             "type": "python",
             "request": "launch",

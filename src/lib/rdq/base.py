@@ -45,6 +45,8 @@ class ServiceUtils:
             return erc == 'AWS.SimpleQueueService.NonExistentQueue'
         if svc == 'cloudformation':
             return (erc == 'StackSetNotFoundException') or (erc == 'OperationNotFoundException')
+        if svc == 'config':
+            return (erc == 'NoSuchConfigurationAggregatorException')
         return False
 
     def is_role_propagation_delay(self, e):

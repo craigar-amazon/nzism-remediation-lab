@@ -70,8 +70,11 @@ def coreCloudWatchDimensionList(action):
         'ConfigRule/Account/Region',
         'ConfigRule',
         'Account',
-        'AutoResourceTag.NZISM/Account'
+        'AutoResourceTag.{}/Account'.format(namespace)
     ]
+
+def coreRedriveAggregatorName():
+    return namespace
 
 def ruleResourceTags():
     return {

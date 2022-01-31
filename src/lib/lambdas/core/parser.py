@@ -9,6 +9,7 @@ import cfg.rules as cfgRules
 from lib.rdq import Profile
 from lib.rdq.svcorg import OrganizationClient, AccountDescriptor
 from lib.base.request import DispatchEvent, DispatchEventTarget
+import lib.lambdas.core.ruleselector as ruleselector
 import lib.lambdas.core.filter as filter
 
 class TargetDescriptor:
@@ -139,10 +140,6 @@ class Parser:
         logging.warning(report)
         return tags
 
-    def isActionEnabled(self, action, configRuleName, accountName):
-        if action == 'remediate' and cfgRules.canRemediate(configRuleName, accountName): return True
-        if action == 'baseline' and cfgRules.canBaseline(configRuleName, accountName): return True
-        return False
 
     def create_invoke(self, dispatch):
         action = dispatch['action']
@@ -156,12 +153,12 @@ class Parser:
             return None
         targetAccountName = optTargetDescriptor.accountName
         configRuleName = dispatch['configRuleNameBase']
-        ruleCodeFolder = cfgRules.codeFolder(configRuleName, action, targetAccountName)
+        ruleCodeFolder = ruleselector.getRuleCodeFolder(configRuleName, action, targetAccountName)
         if not ruleCodeFolder:
             report = {RK.Synopsis: "NoRuleImplementation", 'Dispatch': dispatch, 'Target': optTargetDescriptor.toDict()}
             logging.info(report)
             return None
-        if not self.isActionEnabled(action, configRuleName, targetAccountName):
+        if not ruleselector.isActionEnabled(action, configRuleName, targetAccountName):
             report = {RK.Synopsis: "ActionDisabled", 'Dispatch': dispatch, 'Target': optTargetDescriptor.toDict()}
             logging.info(report)
             return None

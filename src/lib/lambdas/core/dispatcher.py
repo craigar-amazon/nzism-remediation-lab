@@ -12,6 +12,7 @@ from lib.rdq.svclambda import LambdaClient
 from lib.rdq.svccwm import CwmClient
 
 from lib.lambdas.core.parser import Parser, RuleInvocation
+import lib.lambdas.core.ruleselector as ruleselector
 import lib.lambdas.core.cwdims as cwdims
 
 
@@ -83,13 +84,11 @@ class Dispatcher:
         self._retrySleepSecs = retrySleepSecs
 
     def get_base_config_rule_name(self, id, qval):
-        spos = qval.find("-conformance-pack-")
-        if spos <= 0:
-            cause = "Qualified config rule name '{}' in record '{}' is not in expected format".format(qval, id)
-            report = {RK.Synopsis: 'SkippedMessage', RK.Cause: cause}
-            logging.warning(report)
-            return None
-        return qval[0:spos]
+        optBaseName = ruleselector.getRuleBaseName(qval)
+        if optBaseName: return optBaseName
+        cause = "Qualified config rule name '{}' in record '{}' is not in expected format".format(qval, id)
+        report = {RK.Synopsis: 'SkippedMessage', RK.Cause: cause}
+        logging.warning(report)
 
     def extract_dispatch(self, messageId, body):
         if not _has_expected_attribute(body, messageId, 'detail-type', "Config Rules Compliance Change"): return None

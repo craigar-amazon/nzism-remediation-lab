@@ -16,35 +16,12 @@ import lib.cfn as cfn
 import lib.cfn.iam as iam
 import lib.cfn.eventbridge as eb
 
-import cfg.core
-import cfg.roles
-import cfg.org
+import cfg.core, cfg.roles, cfg.org
 
 from cmds.discovery import LandingZoneDiscovery, LandingZoneDescriptor
+import cmds.cfgutil as cfgutil
 import cmds.codeLoader as codeLoader
 
-def get_list(src: list, srcPath) -> list:
-    if src is None: raise ConfigError("{} is undefined".format(srcPath))
-    if len(src) == 0: raise ConfigError("{} is empty".format(srcPath))
-    return src
-
-def get_list_len(src: list, srcPath) -> list:
-    if src is None: raise ConfigError("{} is undefined".format(srcPath))
-    return len(src)
-
-def get_map(src: dict, srcPath) -> dict:
-    if src is None: raise ConfigError("{} is undefined".format(srcPath))
-    if len(src) == 0: raise ConfigError("{} is empty".format(srcPath))
-    return src
-
-def get_map_value(map, mapPath, key):
-    value = get_map(map, mapPath).get(key, None)
-    if value is None: raise ConfigError("{} in {} is undefined", key, mapPath)
-    return value
-
-def getCoreEventBusCfgValue(key): return get_map_value(cfg.core.coreEventBusCfg(), "cfg.core.coreEventBusCfg", key)
-def getCoreQueueCfgValue(key): return get_map_value(cfg.core.coreQueueCfg(), "cfg.core.coreQueueCfg", key)
-def getStandaloneRolesCfgValue(key): return get_map_value(cfg.roles.standaloneRoles(), "cfg.roles.standaloneRoles", key)
 
 def get_lambda_concurrency():
     return {'ReservedConcurrentExecutions': 1}
@@ -72,13 +49,12 @@ class BaseState:
         self.dispatchLambdaRoleName = cfg.core.coreResourceName('ComplianceDispatcherLambdaRole')
         self.dispatchLambdaCodeName = 'ComplianceDispatcher'
         self.dispatchFunctionName = cfg.core.coreFunctionName(self.dispatchLambdaCodeName)
-        self.localAuditRoleName = getStandaloneRolesCfgValue('Audit')
-        self.localRemediationRoleName = getStandaloneRolesCfgValue('Remediation')
+        self.localAuditRoleName = cfgutil.getStandaloneRolesCfgValue('Audit')
+        self.localRemediationRoleName = cfgutil.getStandaloneRolesCfgValue('Remediation')
         self.complianceForwarderStackName = cfg.core.coreResourceName('ComplianceChangeForwarder')
         self.complianceForwarderRoleName = cfg.core.coreResourceName('ComplianceChangeForwarderRole')
         self.complianceForwarderRuleName = cfg.core.coreResourceName('ComplianceChangeForwarderRule')
-        lzSearchPathLen = get_list_len(cfg.roles.landingZoneSearch(), "cfg.roles.landingZoneSearch")
-        self.isLocal = args.forcelocal or (lzSearchPathLen == 0)
+        self.isLocal = args.forcelocal or cfgutil.isLandingZoneSearchDisabled()
 
 class LocalRoleState:
     def __init__(self, auditRoleArn, remediationRoleName):
@@ -128,8 +104,8 @@ def organizationState(clients: Clients, base: BaseState) -> OrganizationState:
     ouTree = clients.org.getOrganizationUnitTree(tracker)
     print("...Done")
     orgId = descriptor.id
-    cfgOUsInScope = get_list(cfg.org.organizationUnitsInScope(orgId), 'cfg.org.organizationUnitsInScope')
-    cfgRegionsInScope = get_list(cfg.org.regionsInScope(orgId), 'cfg.org.regionsInScopeInScope')
+    cfgOUsInScope = cfgutil.getList(cfg.org.organizationUnitsInScope(orgId), 'cfg.org.organizationUnitsInScope')
+    cfgRegionsInScope = cfgutil.getList(cfg.org.regionsInScope(orgId), 'cfg.org.regionsInScopeInScope')
     overOUsInScope = base.args.ous
     useCfg = overOUsInScope is None or len(overOUsInScope) == 0
     ouScopeList = []
@@ -211,7 +187,7 @@ def eventQueueState(clients :Clients, base :BaseState, eventBus :EventBusState) 
     sqsStatements = [
          policy.allowSQSForServiceProducer(base.profile, base.queueName, eventBridge, eventBus.complianceChangeRuleArn)
     ]
-    visibilityTimeoutSecs = getCoreQueueCfgValue('SqsVisibilityTimeoutSecs')
+    visibilityTimeoutSecs = cfgutil.getCoreQueueCfgValue('SqsVisibilityTimeoutSecs')
     queueArn = clients.sqs.declareQueueArn(base.queueName, cmkArn, sqsStatements, visibilityTimeoutSecs, base.tagsCore)
     print("Queue ARN: {}".format(queueArn))
     return EventQueueState(queueArn, cmkArn)
@@ -229,7 +205,7 @@ def eventQueueTarget(clients :Clients, base :BaseState, eventQueue :EventQueueSt
     busName = base.eventBusName
     ruleName = base.complianceRuleName
     queueName = base.queueName
-    maxAgeSecs = getCoreEventBusCfgValue('RuleTargetMaxAgeSecs')
+    maxAgeSecs = cfgutil.getCoreEventBusCfgValue('RuleTargetMaxAgeSecs')
     clients.eb.declareEventBusTarget(busName, ruleName, queueName, eventQueue.queueArn, maxAgeSecs)
 
 def eventBusPermission(clients :Clients, base :BaseState, optOrganization :OrganizationState):
@@ -300,7 +276,7 @@ def dispatchLambdaRemove(clients: Clients, base: BaseState):
     print("Removed {}".format(functionName))
 
 def dispatchLambdaQueueConsumerState(clients: Clients, base: BaseState, dispatchLambda: DispatchLambdaState, eventQueue: EventQueueState):
-    sqsPollCfg = getCoreQueueCfgValue('SqsPollCfg')
+    sqsPollCfg = cfgutil.getCoreQueueCfgValue('SqsPollCfg')
     uuid = clients.lambdafun.declareEventSourceMappingUUID(base.dispatchFunctionName, eventQueue.queueArn, sqsPollCfg)
     print("Queue {} is mapped as event source for {} (UUID {})".format(eventQueue.queueArn, dispatchLambda.lambdaArn, uuid))
 

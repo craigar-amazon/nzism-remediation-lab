@@ -4,7 +4,7 @@ class RuleTable:
 
     def lookup(self, configRuleName :str, key :str, defaultValue :str=None, action :str=None, accountName :str=None):
         rule :dict = self._ruleTable.get(configRuleName)
-        if not rule: return None
+        if not rule: return defaultValue
         if accountName:
             key2 = "{}.{}.{}".format(key, action, accountName)
             if key2 in rule: return rule[key2]
